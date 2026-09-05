@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>A Twisting Forest</title>
+<meta name="description" content="An unfolding text game whose map is a surface you sew together as you walk.">
+<meta name="theme-color" content="#f4efe6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Twisting Forest">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="game">
+  <section id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="prompt" hidden>
+      <p id="prompt-text"></p>
+      <div class="buttons">
+        <button id="yes">yes <span class="key">y</span></button>
+        <button id="no">no <span class="key">n</span></button>
+      </div>
+    </div>
+  </section>
+  <aside id="status">
+    <div class="stat"><span>supplies</span><b id="supplies"></b></div>
+    <div class="stat"><span>steps</span><b id="steps"></b></div>
+    <div class="stat"><span>edges sewn</span><b id="sewn"></b></div>
+    <div class="stat"><span>seed</span><b id="seed"></b></div>
+    <nav id="pad" aria-label="walk">
+      <button data-dir="0,1" aria-label="north">&#9650;</button>
+      <button data-dir="-1,0" aria-label="west">&#9664;</button>
+      <button data-dir="0,-1" aria-label="south">&#9660;</button>
+      <button data-dir="1,0" aria-label="east">&#9654;</button>
+    </nav>
+    <p class="help">tap the map to walk, or use arrows, wasd, hjkl.</p>
+    <div class="buttons">
+      <button id="lie-down">lie down</button>
+      <button id="new-world">new world</button>
+    </div>
+  </aside>
+  <section id="log" aria-live="polite"></section>
+</main>
+<div id="overlay" hidden>
+  <canvas id="zoom"></canvas>
+  <section id="reveal" hidden>
+    <h1>the world</h1>
+    <p id="reveal-name"></p>
+    <p id="reveal-detail"></p>
+    <p id="reveal-stats"></p>
+    <div class="buttons">
+      <button id="again">begin again</button>
+      <button id="same">same world</button>
+    </div>
+  </section>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

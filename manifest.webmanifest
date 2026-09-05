@@ -1,0 +1,14 @@
+{
+  "name": "A Twisting Forest",
+  "short_name": "Twisting Forest",
+  "description": "An unfolding text game whose map is a surface you sew together as you walk.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4efe6",
+  "theme_color": "#f4efe6",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
