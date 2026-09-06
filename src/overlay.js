@@ -2,134 +2,172 @@
 //
 // The tree lies on the capsule, because a tree lies flat on a sphere. Each
 // loop that was closed climbs to its handle: the first loop of a pair goes
-// through the tube, and the second goes up and round it once, since that is
+// through the tube, and the second goes up and rings it once, since that is
 // the other independent way to walk a handle and the reason two loops need
 // only one tube between them.
+//
+// Every point here is a vertex of the actual mesh, nudged out along its own
+// surface, rather than a point worked out from the shape the mesh started as.
+// The mesh is smoothed after it is built, so anything placed by the original
+// arithmetic would sink into it or float off it near the joins, which is
+// exactly where the interesting parts of the walk are.
 
 import { layout } from './sketch.js';
 
 const INK = [30, 26, 22];
 const CAMP = [176, 122, 20];
-const LIFT = 1.035;                 // just off the surface, so it is not eaten by it
+const LIFT = 0.055;
 
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
 const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
-// shortest way round the cylinder
-function dth(a, b) {
-  let d = b - a;
-  while (d > Math.PI) d -= 2 * Math.PI;
-  while (d < -Math.PI) d += 2 * Math.PI;
-  return d;
-}
+export function walkOnSolid(ex, mesh) {
+  const geom = mesh && mesh.geom;
+  if (!geom || !geom.grid) return [];
+  const pos = mesh.positions;
+  const { grid, prof, cyl0, cyl1, C } = geom;
+  const M = grid.length - 1;
+  const at = v => [pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]];
 
-export function walkOnSolid(ex, geom) {
-  if (!geom) return [];
-  const R = geom.RBAR, L = geom.L;
-  const onCap = (x, th, lift = LIFT) =>
-    [Math.max(-L / 2, Math.min(L / 2, x)), R * lift * Math.cos(th), R * lift * Math.sin(th)];
-  const capOf = p => [p[0], Math.atan2(p[2], p[1])];
+  // out of the capsule is away from its axis; out of a tube is away from the
+  // middle of the ring the vertex sits on
+  const offAxis = (v, lift = LIFT) => {
+    const p = at(v);
+    const n = norm([0, p[1], p[2]]);
+    return [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift];
+  };
+  const offRing = (v, ring, lift = LIFT) => {
+    const p = at(v);
+    let cx = 0, cy = 0, cz = 0;
+    for (const w of ring) { const q = at(w); cx += q[0]; cy += q[1]; cz += q[2]; }
+    cx /= ring.length; cy /= ring.length; cz /= ring.length;
+    const n = norm([p[0] - cx, p[1] - cy, p[2] - cz]);
+    return [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift];
+  };
+
+  const vert = (j, k) => grid[Math.max(1, Math.min(M - 1, Math.round(j)))][((Math.round(k) % C) + C) % C];
+  const wrap = k => ((k % C) + C) % C;
+
+  // Between grid vertices rather than snapped to them: snapping drew the walk
+  // as a staircase, since a path across the capsule almost never runs along
+  // the grid.
+  const surface = (j, k, lift = LIFT) => {
+    const jj = Math.max(1, Math.min(M - 2, j));
+    const j0 = Math.floor(jj), fj = jj - j0;
+    const k0 = Math.floor(k), fk = k - k0;
+    const p = [0, 0, 0];
+    const corners = [
+      [grid[j0][wrap(k0)], (1 - fj) * (1 - fk)],
+      [grid[j0][wrap(k0 + 1)], (1 - fj) * fk],
+      [grid[j0 + 1][wrap(k0)], fj * (1 - fk)],
+      [grid[j0 + 1][wrap(k0 + 1)], fj * fk],
+    ];
+    for (const [v, w] of corners) {
+      p[0] += pos[v * 3] * w; p[1] += pos[v * 3 + 1] * w; p[2] += pos[v * 3 + 2] * w;
+    }
+    const n = norm([0, p[1], p[2]]);
+    return [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift];
+  };
+
+  const dk = (a, b) => { let d = b - a; while (d > C / 2) d -= C; while (d < -C / 2) d += C; return d; };
+  const gridPath = (a, b, steps = 20) => {
+    const d = dk(a[1], b[1]);
+    const out = [];
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      out.push(surface(a[0] + (b[0] - a[0]) * t, a[1] + d * t));
+    }
+    return out;
+  };
 
   const loops = ex.loopEdges();
   const lay = ex._solidLayout || (ex._solidLayout = layout(ex, 700, { skip: loops }));
-  const { ids, index, pos, links, N } = lay;
+  const { ids, index, pos: flat, N } = lay;
   if (!N) return [];
 
-  // the tree, spread over the body of the capsule but off the very top,
-  // which is where the tubes come out
+  // spread the tree over the body, off the very top where the tubes come out
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (let i = 0; i < N; i++) {
-    x0 = Math.min(x0, pos[i * 2]); x1 = Math.max(x1, pos[i * 2]);
-    y0 = Math.min(y0, pos[i * 2 + 1]); y1 = Math.max(y1, pos[i * 2 + 1]);
+    x0 = Math.min(x0, flat[i * 2]); x1 = Math.max(x1, flat[i * 2]);
+    y0 = Math.min(y0, flat[i * 2 + 1]); y1 = Math.max(y1, flat[i * 2 + 1]);
   }
-  const spanX = (x1 - x0) || 1, spanY = (y1 - y0) || 1;
+  const sx = (x1 - x0) || 1, sy = (y1 - y0) || 1;
   const place = i => {
-    const u = (pos[i * 2] - x0) / spanX, v = (pos[i * 2 + 1] - y0) / spanY;
-    return [-L / 2 + (0.09 + 0.82 * u) * L, Math.PI + (v - 0.5) * 1.62 * Math.PI];
+    const u = (flat[i * 2] - x0) / sx, v = (flat[i * 2 + 1] - y0) / sy;
+    return [cyl0 + (0.06 + 0.88 * u) * (cyl1 - cyl0), C / 2 + (v - 0.5) * C * 0.78];
   };
-  const nodeAt = new Map();
-  for (let i = 0; i < N; i++) nodeAt.set(ids[i], place(i));
 
   const paths = [];
-  const surfacePath = (a, b, steps = 14, lift = LIFT) => {
-    const d = dth(a[1], b[1]);
-    const pts = [];
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      pts.push(onCap(a[0] + (b[0] - a[0]) * t, a[1] + d * t, lift));
-    }
-    return pts;
-  };
-
-  for (const [a, b] of links) {
+  for (const [a, b] of lay.links) {
     if (a === b) continue;
-    paths.push({ pts: surfacePath(place(a), place(b)), rgb: INK, wide: true });
+    paths.push({ pts: gridPath(place(a), place(b)), rgb: INK, wide: true });
   }
 
-  // the tubes, and the loops that use them
   const plan = ex.tubePlan();
   plan.forEach((t, i) => {
     const tube = geom.tubes[i];
-    if (!tube) return;
-    const alongTube = (from, to, lift = 1.09) => {
-      const pts = [];
-      const n = tube.centres.length - 1;
-      const a = Math.round(from * n), b = Math.round(to * n);
-      const step = a <= b ? 1 : -1;
-      for (let s = a; step > 0 ? s <= b : s >= b; s += step) {
-        const f = tube.frames[s];
-        pts.push(add(tube.centres[s], mul(norm(f.U), tube.rad * lift)));
+    if (!tube || !tube.rings) return;
+    const rings = tube.rings;
+    const mid = Math.floor(rings.length / 2);
+    // follow the outside of the tube: whichever way round is furthest from
+    // the capsule's axis when it is over the top
+    let best = 0, far = -Infinity;
+    rings[mid].forEach((v, k) => {
+      const p = at(v);
+      const d = Math.hypot(p[1], p[2]);
+      if (d > far) { far = d; best = k; }
+    });
+    const along = (from, to) => {
+      const out = [];
+      const step = from <= to ? 1 : -1;
+      for (let s = from; step > 0 ? s <= to : s >= to; s += step) {
+        out.push(offRing(rings[s][best], rings[s]));
       }
-      return pts;
+      return out;
     };
-    const endsOf = merge => {
+    const footOf = ringIndex => {
+      // where the tube meets the capsule, in grid terms
+      const p = at(rings[ringIndex][best]);
+      let j = cyl0, gap = Infinity;
+      for (let q = cyl0; q <= cyl1; q++) {
+        if (Math.abs(prof[q].x - p[0]) < gap) { gap = Math.abs(prof[q].x - p[0]); j = q; }
+      }
+      return [j, (Math.atan2(p[2], p[1]) / (2 * Math.PI)) * C];
+    };
+    const ends = merge => {
       const e = ex.edges[merge.edge];
-      const A = nodeAt.get(e.a.node), B = nodeAt.get(e.b.node);
-      return [A, B];
+      const a = index.get(e.a.node), b = index.get(e.b.node);
+      return a === undefined || b === undefined ? null : [place(a), place(b)];
     };
-    const capA = capOf(tube.cA), capB = capOf(tube.cB);
 
-    // through the tube
-    const [uA, uB] = endsOf(t.through);
-    if (uA && uB) {
+    const through = ends(t.through);
+    if (through) {
       paths.push({ rgb: INK, wide: true, pts: [
-        ...surfacePath(uA, capA, 10),
-        ...alongTube(0, 1),
-        ...surfacePath(capB, uB, 10),
+        ...gridPath(through[0], footOf(0), 10),
+        ...along(0, rings.length - 1),
+        ...gridPath(footOf(rings.length - 1), through[1], 10),
       ] });
     }
 
-    // and round it, if a second loop went that way
     if (t.around) {
-      const [vA, vB] = endsOf(t.around);
-      if (vA && vB) {
-        const mid = Math.floor((tube.centres.length - 1) / 2);
-        const f = tube.frames[mid], c = tube.centres[mid];
-        const ring = [];
-        for (let k = 0; k <= 40; k++) {
-          const a = (k / 40) * Math.PI * 2;
-          ring.push(add(c, add(mul(f.U, Math.cos(a) * tube.rad * 1.13),
-                               mul(f.V, Math.sin(a) * tube.rad * 1.13))));
-        }
+      const round = ends(t.around);
+      if (round) {
+        const ring = rings[mid].map(v => offRing(v, rings[mid], LIFT + 0.02));
         paths.push({ rgb: INK, wide: true, pts: [
-          ...surfacePath(vA, capA, 10),
-          ...alongTube(0, mid / (tube.centres.length - 1), 1.13),
-          ...ring,
-          ...alongTube(mid / (tube.centres.length - 1), 1, 1.13),
-          ...surfacePath(capB, vB, 10),
+          ...gridPath(round[0], footOf(0), 10),
+          ...along(0, mid),
+          ...ring, ring[0],
+          ...along(mid, rings.length - 1),
+          ...gridPath(footOf(rings.length - 1), round[1], 10),
         ] });
       }
     }
   });
 
-  // where they stopped, and the camp
   for (let i = 0; i < N; i++) {
     const n = ex.node(ids[i]);
     if (!n.isCamp) continue;
-    const p = place(i);
-    paths.push({ pts: [], rgb: CAMP, dot: onCap(p[0], p[1], LIFT + 0.02) });
+    const g = place(i);
+    paths.push({ pts: [], rgb: CAMP, dot: surface(g[0], g[1], LIFT + 0.03) });
   }
   return paths;
 }

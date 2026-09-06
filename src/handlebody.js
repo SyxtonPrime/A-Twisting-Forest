@@ -20,10 +20,12 @@
 import { orientFaces } from './mesh.js';
 
 const C = 36;          // divisions round the capsule
-const P = 4;           // a hole is a P by P patch, so tubes are 4P-gons
-const RING = 4 * P;
-const SEG = 36;        // rings along a tube
+const SEG = 40;        // rings along a tube
 const RBAR = 1;
+const TUBE = 0.82;     // tube radius, near enough the body's that the two read
+                       // as one piece of material rather than pipe on a bar
+const GAP = 1.85;      // half the distance between a tube's two feet
+const SMOOTH = 38;     // rounds the joins into fillets
 
 // One material throughout: the shape is the whole of what there is to see,
 // and colouring the tubes differently only made it look like a diagram.
@@ -54,16 +56,25 @@ function catmull(pts, t) {
 
 export function buildHandlebody(tubeTwists) {
   const n = tubeTwists.length;
-  const geom = { RBAR, tubes: [] };
+  // Match the hole's perimeter to the tube's circumference so the two stitch
+  // together without either being stretched round the other.
+  const P = Math.max(3, Math.min(9, Math.round((TUBE * C) / 4)));
+  const RING = 4 * P;
+  const geom = { RBAR, tubes: [], C, P };
   const pos = [];                       // [x, y, z] per vertex
   const faces = [];                     // [a, b, c, d], d repeated for a triangle
   const rgb = [];                       // one colour per face
   const vid = i => i;
 
   // ---- the capsule ----------------------------------------------------
-  const span = n ? 2.2 + 2.2 * (n - 1) : 0;
-  const L = Math.max(2.4, span + 2.4);
-  const cellX = (2 * Math.PI * RBAR) / C;          // keep the grid square-ish
+  // Neighbouring tubes stand as close as their holes allow, so the strut
+  // between two holes is thin and the thing reads as one body with holes in
+  // it rather than as separate hoops on a rail.
+  const cellX = (2 * Math.PI * RBAR) / C;
+  const patchWidth = P * cellX;
+  const spacing = 2 * GAP + patchWidth * 1.3;
+  const extent = n > 1 ? spacing * (n - 1) : 0;
+  const L = Math.max(2.4, extent + 2 * GAP + patchWidth * 0.5 + 0.7);
   const Ml = Math.max(8, Math.round(L / cellX));
   const Mc = Math.max(4, Math.round((Math.PI / 2) * RBAR / cellX));
   const prof = [];
@@ -72,14 +83,17 @@ export function buildHandlebody(tubeTwists) {
     prof.push({ x: -L / 2 - RBAR * Math.cos(a), r: RBAR * Math.sin(a), cyl: false });
   }
   const cyl0 = prof.length - 1;
+  geom.cyl0 = cyl0;
   for (let i = 1; i <= Ml; i++) prof.push({ x: -L / 2 + (i / Ml) * L, r: RBAR, cyl: true });
   const cyl1 = prof.length - 1;
+  geom.cyl1 = cyl1;
   for (let i = 1; i <= Mc; i++) {
     const a = (i / Mc) * (Math.PI / 2);
     prof.push({ x: L / 2 + RBAR * Math.sin(a), r: RBAR * Math.cos(a), cyl: false });
   }
   const M = prof.length - 1;
   geom.L = L;
+  geom.prof = prof;
 
   const grid = [];                       // grid[j][k], poles at j = 0 and M
   for (let j = 0; j <= M; j++) {
@@ -96,13 +110,14 @@ export function buildHandlebody(tubeTwists) {
     }
     grid.push(row);
   }
+  geom.grid = grid;
 
   // ---- where the tubes meet it ---------------------------------------
   // Two holes per loop, side by side along the top of the capsule.
   const holes = [];
   for (let i = 0; i < n; i++) {
-    const xc = n === 1 ? 0 : -span / 2 + (i * span) / (n - 1);
-    for (const dx of [-0.72, 0.72]) {
+    const xc = -extent / 2 + i * spacing;
+    for (const dx of [-GAP, GAP]) {
       const x = xc + dx;
       let j = cyl0;
       let best = Infinity;
@@ -151,23 +166,30 @@ export function buildHandlebody(tubeTwists) {
     const up = [0, 1, 0];
     const along = norm(sub(cB, cA));
 
-    const way = twisted
-      ? [cA, add(cA, mul(nA, RBAR * 1.5)),
-         add(add(cA, mul(sub(cB, cA), 0.42)), mul(up, RBAR * 2.35)),
-         add(add(cB, mul(along, RBAR * 1.25)), mul(up, RBAR * 1.75)),
-         add(add(cB, mul(along, RBAR * 1.95)), mul(up, RBAR * 0.35)),
-         add(add(cB, mul(along, RBAR * 1.5)), mul(up, -RBAR * 0.95)),
-         add(add(cB, mul(along, RBAR * 0.45)), mul(up, -RBAR * 1.4)),   // in through the wall
-         cB]
-      : [cA, add(cA, mul(nA, RBAR * 1.25)),
-         add(add(cA, mul(sub(cB, cA), 0.5)), mul(up, RBAR * 2.05)),
-         add(cB, mul(nB, RBAR * 1.25)), cB];
+    // A plain semicircle from one foot to the other. Waypoints joined by a
+    // spline gave a pointed arch, which reads as a hoop stood on a bar; a
+    // circle leaves both feet straight up and comes over evenly, so the hole
+    // under it is round and the whole thing reads as one piece with a hole in
+    // it. Both feet sit on top of the capsule, so the circle's centre is the
+    // point between them and its radius is half their distance.
+    const O = [(cA[0] + cB[0]) / 2, (cA[1] + cB[1]) / 2, (cA[2] + cB[2]) / 2];
+    const arcR = Math.hypot(cB[0] - cA[0], cB[1] - cA[1], cB[2] - cA[2]) / 2;
+    const sign = cB[0] > cA[0] ? 1 : -1;
+    const arc = (ang, scale = 1) =>
+      [O[0] + sign * Math.cos(ang) * arcR * scale, O[1] + Math.sin(ang) * arcR * scale, O[2]];
 
-    // parallel transport a frame along the path so the tube does not wring
     const centres = [], frames = [];
-    for (let s = 0; s <= SEG; s++) {
-      const t = s / SEG;
-      centres.push(catmull(way, t));
+    if (twisted) {
+      // over the top, out past the far foot, then down and back in through
+      // the wall, which is the only way a twisted tube closes up in space
+      const way = [cA,
+        arc(Math.PI * 0.86), arc(Math.PI * 0.5), arc(Math.PI * 0.16, 1.04),
+        arc(-Math.PI * 0.12, 1.12), arc(-Math.PI * 0.34, 1.06),
+        add(cB, mul(up, -RBAR * 1.5)),
+        cB];
+      for (let s = 0; s <= SEG; s++) centres.push(catmull(way, s / SEG));
+    } else {
+      for (let s = 0; s <= SEG; s++) centres.push(arc(Math.PI * (1 - s / SEG)));
     }
     let U = perp(norm(sub(centres[1], centres[0])), sub(pos[loopA[0]], cA));
     for (let s = 0; s <= SEG; s++) {
@@ -182,7 +204,7 @@ export function buildHandlebody(tubeTwists) {
     // forced (reversed is exactly what makes a twisted handle), the offset is
     // whichever costs the least wringing
     const dir = twisted ? 1 : -1;
-    const rad = RBAR * 0.52;
+    const rad = TUBE;
     const ringAt = (s, o) => {
       const f = frames[s], c = centres[s];
       const out = [];
@@ -231,7 +253,7 @@ export function buildHandlebody(tubeTwists) {
         faceRGB(STONE);
       }
     }
-    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames });
+    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames, rings });
   }
 
   const packed = pack(pos, faces, rgb);
@@ -298,6 +320,14 @@ function pack(pos, faces, rgb) {
     adj[fill[edgeB[i]]++] = edgeA[i];
   }
 
+  // Taubin smoothing: one pass in, one pass out. A plain average would shrink
+  // the whole thing away; alternating with an outward pass leaves the size
+  // alone and only takes the corners off, which is what turns a tube bolted
+  // onto a bar into one piece of material with a hole through it. It moves
+  // vertices and nothing else, so the quad grid and the topology survive it
+  // exactly, which matters if anything is ever going to be laid out on them.
+  taubin(positions, adj, start, V, SMOOTH);
+
   const { orient, orientable } = orientFaces(fa, F, V);
   return {
     V, F, faces: fa, positions, edgeA, edgeB, adj, start, deg, orient, orientable,
@@ -306,3 +336,22 @@ function pack(pos, faces, rgb) {
   };
 }
 
+function taubin(pos, adj, start, V, iters, lambda = 0.55, mu = -0.58) {
+  const tmp = new Float32Array(pos.length);
+  const pass = w => {
+    for (let i = 0; i < V; i++) {
+      const s0 = start[i], s1 = start[i + 1], deg = s1 - s0;
+      if (!deg) { for (let c = 0; c < 3; c++) tmp[i * 3 + c] = pos[i * 3 + c]; continue; }
+      let ax = 0, ay = 0, az = 0;
+      for (let k = s0; k < s1; k++) {
+        const j = adj[k];
+        ax += pos[j * 3]; ay += pos[j * 3 + 1]; az += pos[j * 3 + 2];
+      }
+      tmp[i * 3] = pos[i * 3] + w * (ax / deg - pos[i * 3]);
+      tmp[i * 3 + 1] = pos[i * 3 + 1] + w * (ay / deg - pos[i * 3 + 1]);
+      tmp[i * 3 + 2] = pos[i * 3 + 2] + w * (az / deg - pos[i * 3 + 2]);
+    }
+    pos.set(tmp);
+  };
+  for (let it = 0; it < iters; it++) { pass(lambda); pass(mu); }
+}

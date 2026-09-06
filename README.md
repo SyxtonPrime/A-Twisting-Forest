@@ -85,6 +85,19 @@ approximated: the tests check the built mesh's Euler characteristic and
 orientability against what the normal-form polygon says, by a separate route,
 and check it is a closed manifold with every edge bordering exactly two faces.
 
+Each arch is a plain semicircle from one foot to the other. Waypoints joined
+by a spline gave a pointed arch, which reads as a hoop stood on a rail; a
+circle leaves both feet straight up and comes over evenly, so the hole under it
+is round. Neighbouring tubes then stand as close as their holes allow, and the
+whole thing is smoothed afterwards, which turns the joins into fillets. What
+was a tube bolted onto a bar becomes one piece of material with holes through
+it.
+
+The smoothing is Taubin's: one pass in, one pass out. A plain average would
+shrink the whole thing away; alternating with an outward pass leaves the size
+alone and only takes the corners off. It moves vertices and nothing else, so
+the quad grid and the topology survive it exactly.
+
 A twisted tube cannot close up in space without passing through something, so
 it is routed the way the classic picture routes it: over the top, round, and
 back up into its hole from inside the capsule. You can watch it go through the
@@ -97,12 +110,31 @@ climbs to its handle: the first of a pair goes through the tube, and the second
 goes up and rings it once, which is the other independent way to walk a handle
 and the reason two loops need only one tube between them.
 
+Every point of it is a vertex of the actual mesh, interpolated and nudged out
+along the surface, rather than a point worked out from the shape the mesh
+started as. The mesh is smoothed after it is built, so anything placed by the
+original arithmetic sinks into it or floats off it near the joins, which is
+exactly where the interesting parts of the walk are.
+
 An earlier version meshed the normal-form polygon and let a physical
 relaxation find a shape, with springs, repulsion, surface tension and pressure.
 It was honest and it looked like crumpled paper, because these surfaces are
 flat everywhere except at their cone points and nothing in that energy says
 "look like a pretzel". Building the classic picture directly is both prettier
 and more exact, so the relaxation is gone.
+
+## Where this is going
+
+This is phase one of three: **exploration**, then a **camp manager**, then a
+**Civ-like battler**. The whole of it is meant to be played on a flat net, and
+only at the end do you zoom out and see what the world was.
+
+That is why the solid is a stitched quad grid rather than an isosurface. An
+implicit surface blended from a skeleton would give a smoother blob with less
+work, but it comes out as an unstructured triangle soup, and it cannot
+represent a twisted handle at all, since an implicit surface is always
+orientable. A regular quad grid can carry a square or hexagonal playing grid
+later, and the smoothing pass is chosen to preserve it.
 
 ## Layout
 

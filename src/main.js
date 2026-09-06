@@ -158,7 +158,7 @@ function buildSolid() {
   const mesh = buildHandlebody(ex.tubePlan().map(t => t.twisted));
   solid = new Solid($('solid'), mesh, mesh.positions);
   solid.el = 0.42;
-  solidWalk = walkOnSolid(ex, mesh.geom);
+  solidWalk = walkOnSolid(ex, mesh);
   solid.overlay = walkOn ? solidWalk : null;
   solid.resize(stageSide(), stageSide());
   const spin = () => {

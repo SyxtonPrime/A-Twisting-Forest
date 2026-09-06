@@ -572,6 +572,32 @@ test('handlebody: the built solid has the topology the loops asked for', () => {
   }
 });
 
+test('handlebody: it stays a regular quad grid, which later phases need', () => {
+  for (const twists of [[], [false], [false, true]]) {
+    const m = buildHandlebody(twists);
+    const label = JSON.stringify(twists);
+    let tris = 0;
+    for (let f = 0; f < m.F; f++) {
+      const q = [m.faces[f*4], m.faces[f*4+1], m.faces[f*4+2], m.faces[f*4+3]];
+      if (new Set(q).size === 3) tris++;
+    }
+    // only the two ends of the capsule are fans; everything else is quads
+    eq(tris, 2 * m.geom.C, `${label}: only the two poles are triangles`);
+    ok(tris / m.F < 0.06, `${label}: the mesh is overwhelmingly quads`);
+    // smoothing moves vertices and must not have changed the topology
+    eq(m.chi, 2 - 2 * twists.length, `${label}: smoothing left chi alone`);
+    eq(m.orientable, twists.every(t => !t), `${label}: smoothing left orientability alone`);
+    // and must not have collapsed anything: no zero-length edge
+    for (let e = 0; e < m.edgeA.length; e++) {
+      const a = m.edgeA[e], b = m.edgeB[e];
+      const d = Math.hypot(m.positions[a*3] - m.positions[b*3],
+                           m.positions[a*3+1] - m.positions[b*3+1],
+                           m.positions[a*3+2] - m.positions[b*3+2]);
+      ok(d > 1e-4, `${label}: edge ${e} collapsed to nothing`);
+    }
+  }
+});
+
 test('handlebody: the mesh is a closed surface with nothing stranded', () => {
   for (const twists of [[], [true], [false, true, false]]) {
     const m = buildHandlebody(twists);
