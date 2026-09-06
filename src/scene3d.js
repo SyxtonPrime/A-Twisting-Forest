@@ -4,7 +4,6 @@
 // because flat-shading a few hundred quads is not much code.
 
 import { TERRAIN } from './world.js';
-import { PAPER } from './render.js';
 
 const NAMES = Object.keys(TERRAIN);
 const COLOUR = {

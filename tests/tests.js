@@ -1,5 +1,5 @@
-import { Polygon, DIRS, I2, mul, applyM, det, key, same, surfaceName, E, N, W, S } from '../src/polygon.js';
-import { Game } from '../src/game.js';
+import { Polygon, DIRS, I2, mul, applyM, det, key, same, surfaceName, normalForm, normalFormSides, normalFormLen, E, N, W, S } from '../src/polygon.js';
+import { Explore } from '../src/explore.js';
 import { World } from '../src/world.js';
 import { buildMesh } from '../src/mesh.js';
 import { mulberry32 } from '../src/rng.js';
@@ -146,46 +146,6 @@ test('partial gluing: boundary components and capped surface', () => {
   eq([c.boundaries, c.capped, c.name], [1, 2, 'a sphere']);
 });
 
-test('game: walking off an unsewn edge sews it and continues inside', () => {
-  const g = new Game('test', { sides: 16, len: 6 });
-  g.supplies = 1000;
-  const c0 = g.poly.centre();
-  for (let i = 0; i <= c0[1]; i++) g.move([0, -1]);
-  if (g.phase === 'prompt') g.answer(true);
-  ok(g.poly.pairCount() >= 1, 'an edge was sewn');
-  ok(g.poly.inside(g.pos), 'player is inside the polygon');
-  eq(g.chart, [0, -(c0[1] + 1)], 'dead reckoning ignores the seam');
-  eq(Math.abs(det(g.frame)), 1);
-});
-
-test('game: development is consistent around a flat torus', () => {
-  const g = new Game('test', { sides: 16, len: 6 });
-  for (let i = 0; i < 4; i++) g.poly.glue(i, 11 - i, -1);
-  for (let i = 0; i < 4; i++) g.poly.glue(4 + i, 15 - i, -1);
-  const dev = g.develop(61, 61);
-  for (const [k, st] of dev) {
-    ok(st, 'every offset reachable on a closed world');
-    const [ox, oy] = k.split(',').map(Number);
-    const expect = [((g.pos[0] + ox) % 24 + 24) % 24, ((g.pos[1] + oy) % 24 + 24) % 24];
-    eq(st.cell, expect, `offset ${k}`);
-    eq(st.F, I2);
-  }
-});
-
-test('game: refusing forbids that seam and finds another', () => {
-  const g = new Game('test2', { sides: 16, len: 6 });
-  g.supplies = 1000;
-  const c0 = g.poly.centre();
-  // explore the whole rectangle first so every landing is recognisable
-  for (let y = 0; y < g.poly.H; y++) for (let x = 0; x < g.poly.W; x++) g.explored.add(key([x, y]));
-  for (let i = 0; i <= c0[1]; i++) g.move([0, -1]);
-  eq(g.phase, 'prompt', 'a recognisable landing is offered');
-  const before = g.forbidden.size;
-  g.answer(false);
-  ok(g.forbidden.size === before + 1, 'refusal recorded');
-  ok(g.phase === 'prompt' || g.poly.pairCount() === 1, 'either asked again or sewn elsewhere');
-});
-
 test('sewRandom closes any polygon and only touches free edges', () => {
   const rng = mulberry32(7);
   for (const sides of [4, 8, 12, 16]) {
@@ -310,6 +270,196 @@ test('mesh: face winding agrees with the polygon orientability test', () => {
       for (const [k, v] of seen) eq(v, 1, `directed edge ${k} used once`);
     }
   }
+});
+
+test('normal form realises every closed surface, and the mesh agrees', () => {
+  const check = (h, r, wantChi, wantOr, wantName) => {
+    const poly = normalForm(h, r, 4);
+    const info = poly.classify();
+    eq([info.chi, info.orientable, info.name, info.closed], [wantChi, wantOr, wantName, true], `h=${h} r=${r}`);
+    const world = new World(`nf-${h}-${r}`, { poly });
+    const m = buildMesh(poly, world, new Set());
+    eq(m.chi, wantChi, `mesh chi h=${h} r=${r}`);
+    eq(m.orientable, wantOr, `mesh orientability h=${h} r=${r}`);
+    eq(m.edgeA.length, m.F * 2, `no folded cells h=${h} r=${r}`);
+    for (let f = 0; f < m.F; f++) {
+      const q = [m.faces[f*4], m.faces[f*4+1], m.faces[f*4+2], m.faces[f*4+3]];
+      eq(new Set(q).size, 4, `cell ${f} has four distinct corners h=${h} r=${r}`);
+    }
+  };
+  check(0, 0, 2, true, 'a sphere');
+  check(0, 1, 1, false, 'a projective plane');
+  check(1, 0, 0, true, 'a torus');
+  check(2, 0, -2, true, 'a double torus');
+  check(3, 0, -4, true, 'a surface of genus 3');
+  check(0, 1, 1, false, 'a projective plane');
+  check(0, 2, 0, false, 'a klein bottle');
+  check(0, 5, -3, false, 'a surface with 5 crosscaps');
+  // Dyck: a handle beside a crosscap is worth three crosscaps
+  check(1, 1, -1, false, 'a surface with 3 crosscaps');
+  check(2, 1, -3, false, 'a surface with 5 crosscaps');
+});
+
+test('normal form picks a subdivision that keeps the mesh usable', () => {
+  for (const [h, r] of [[0,0],[1,0],[2,0],[4,0],[0,1],[0,2],[0,5],[1,1],[3,2],[0,9]]) {
+    const poly = normalForm(h, r);
+    eq(poly.n, normalFormSides(h, r), `sides for h=${h} r=${r}`);
+    eq(poly.k, normalFormLen(h, r), `len for h=${h} r=${r}`);
+    const cells = poly.W * poly.H;
+    ok(cells >= 250 && cells <= 1400, `h=${h} r=${r} has ${cells} cells`);
+    const world = new World('res', { poly });
+    const m = buildMesh(poly, world, new Set());
+    eq(m.chi, poly.classify().chi, `chi h=${h} r=${r}`);
+    eq(m.edgeA.length, m.F * 2, `no folded cells h=${h} r=${r}`);
+    // and the rectangle is not a sliver
+    ok(Math.min(poly.W, poly.H) / Math.max(poly.W, poly.H) > 0.25, `shape h=${h} r=${r}`);
+  }
+});
+
+test('a rectangle of the right perimeter exists for any polygon', () => {
+  for (const sides of [3, 4, 5, 6, 7, 10, 16, 22]) {
+    for (const len of [2, 4, 6]) {
+      const p = new Polygon({ sides, len });
+      eq(2 * (p.W + p.H), sides * len, `perimeter for ${sides}-gon len ${len}`);
+      eq(p.boundary.length, sides * len, 'one unit edge per rim step');
+      ok(p.W >= 1 && p.H >= 1, 'rectangle is not degenerate');
+      for (let i = 0; i < p.boundary.length; i++) {
+        const [, e] = p.unitSegment(i);
+        const [s] = p.unitSegment((i + 1) % p.boundary.length);
+        eq(s, e, `rim joins up at ${i}`);
+      }
+    }
+  }
+});
+
+// Walk the graph without a person: always take the first way out.
+function walk(ex, steps, answerYes = true) {
+  const target = ex.steps + steps;
+  for (let guard = 0; ex.steps < target && ex.phase !== 'over' && guard < steps * 4; guard++) {
+    if (ex.phase === 'ask') { ex.answer(answerYes); continue; }
+    ex.go(ex.ways()[0]);
+  }
+  return ex;
+}
+
+function checkGraph(ex) {
+  for (const e of ex.edges) {
+    eq(ex.node(e.a.node).ports[e.a.port], e.id, `edge ${e.id} hooked at a`);
+    eq(ex.node(e.b.node).ports[e.b.port], e.id, `edge ${e.id} hooked at b`);
+  }
+  for (const n of ex.nodes) {
+    eq(n.ports.length, n.degree, `node ${n.id} port count`);
+    for (let p = 0; p < n.degree; p++) {
+      const id = n.ports[p];
+      if (id === null) continue;
+      const e = ex.edges[id];
+      ok((e.a.node === n.id && e.a.port === p) || (e.b.node === n.id && e.b.port === p),
+        `node ${n.id} port ${p} agrees with edge ${id}`);
+    }
+  }
+}
+
+test('explore: walking builds a graph and spends supplies', () => {
+  const ex = new Explore('walk-test');
+  ex.supplies = 500;
+  eq(ex.nodes.length, 1, 'starts at the dead fire alone');
+  eq(ex.ways().length, 1, 'one way out to begin with');
+  walk(ex, 40);
+  ok(ex.steps >= 40, 'the steps were taken');
+  eq(ex.supplies, 500 - ex.steps + ex.nodes.filter(n => n.looted).reduce((s, n) => s + n.supplies, 0),
+    'food spent one an hour, less what was found');
+  ok(ex.nodes.length > 1, 'places were found');
+  checkGraph(ex);
+});
+
+test('explore: saying yes closes a loop, saying no does not', () => {
+  const yes = new Explore('loop-test'); yes.supplies = 500;
+  walk(yes, 120, true);
+  ok(yes.merges.length > 0, 'some loops were closed');
+  checkGraph(yes);
+  // every merge is an edge whose two ends were both already known
+  for (const m of yes.merges) ok(yes.edges[m.edge], 'merge names a real edge');
+
+  const no = new Explore('loop-test'); no.supplies = 500;
+  walk(no, 120, false);
+  eq(no.merges.length, 0, 'refusing never closes a loop');
+  ok(no.refused.size > 0, 'refusals were recorded');
+  checkGraph(no);
+  ok(no.nodes.length > yes.nodes.length, 'refusing keeps making new places instead');
+});
+
+test('explore: a refusal is never offered again', () => {
+  const ex = new Explore('refuse-test');
+  ex.supplies = 500;
+  for (let i = 0; i < 400 && ex.phase !== 'over'; i++) {
+    if (ex.phase === 'ask') {
+      const p = ex.pending;
+      const k = `${p.from}:${p.fromPort}>${p.to}:${p.toPort}`;
+      ok(!ex.refused.has(k), 'never asks about a tie already refused');
+      ex.answer(false);
+      ok(ex.refused.has(k), 'and remembers it');
+      continue;
+    }
+    ex.go(ex.ways()[0]);
+  }
+});
+
+test('explore: handles, crosscaps and Dyck', () => {
+  const ex = new Explore('surface-test');
+  const s = (h, c) => { ex.merges = []; for (let i = 0; i < h; i++) ex.merges.push({ twist: false });
+                        for (let i = 0; i < c; i++) ex.merges.push({ twist: true }); return ex.surface(); };
+  eq(s(0, 0), { handles: 0, crosscaps: 0, orientable: true, genus: 0, caps: 0, loops: 0 });
+  eq(s(2, 0), { handles: 2, crosscaps: 0, orientable: true, genus: 2, caps: 0, loops: 2 });
+  eq(s(0, 3), { handles: 0, crosscaps: 3, orientable: false, genus: 0, caps: 3, loops: 3 });
+  // a handle beside a crosscap is worth three crosscaps
+  eq(s(1, 1).caps, 3);
+  eq(s(2, 1).caps, 5);
+  // and the surface that comes out of it is the one the polygon names
+  for (const [h, c, name] of [[0,0,'a sphere'], [1,0,'a torus'], [3,0,'a surface of genus 3'],
+                              [0,1,'a projective plane'], [0,2,'a klein bottle'], [1,1,'a surface with 3 crosscaps']]) {
+    const r = s(h, c);
+    eq(normalForm(r.handles, r.crosscaps, 4).classify().name, name, `h=${h} c=${c}`);
+  }
+});
+
+test('explore: a world with no loose ends offers camp whatever the food says', () => {
+  const ex = new Explore('closed-test');
+  ex.supplies = 5000;
+  walk(ex, 2000, true);
+  if (ex.looseEnds() === 0) {
+    ok(ex.canCamp(), 'camp offered once there is nowhere new');
+    ok(ex.log.some(l => l.includes('run out of forest')), 'and the player is told');
+  }
+  // whatever happened, the graph is still sound
+  checkGraph(ex);
+});
+
+test('explore: camp fixes the shape of the world', () => {
+  const ex = new Explore('camp-test');
+  ex.supplies = 500;
+  walk(ex, 90, true);
+  ok(ex.merges.length >= 1, 'a loop was closed before camp');
+  ex.supplies = 10;
+  ok(ex.canCamp(), 'camp is offered once food runs low');
+  const before = ex.surface();
+  ex.makeCamp();
+  ok(ex.camped, 'camp made');
+  eq(ex.canCamp(), false, 'and cannot be made twice');
+  ex.supplies = 500;
+  walk(ex, 120, true);
+  eq(ex.surface(), before, 'later agreements change the map but not the shape');
+  checkGraph(ex);
+});
+
+test('explore: running out of food ends it', () => {
+  const ex = new Explore('end-test');
+  ex.supplies = 6;
+  walk(ex, 200, true);
+  eq(ex.phase, 'over');
+  ok(ex.supplies <= 0, 'food gone');
+  const n = ex.steps;
+  walk(ex, 10, true);
+  eq(ex.steps, n, 'and nothing moves after that');
 });
 
 const el = document.getElementById('out');

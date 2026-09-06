@@ -1,108 +1,78 @@
 :root {
   --paper: #f4efe6; --ink: #1e1a16; --faint: #a89f92; --rule: #d9d0c1;
-  --pad: env(safe-area-inset-bottom, 0px);
+  --safe: env(safe-area-inset-bottom, 0px);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body {
   margin: 0; min-height: 100%; background: var(--paper); color: var(--ink);
-  font: 14px/1.5 "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font: 14px/1.6 "DejaVu Sans Mono", Menlo, Consolas, monospace;
   -webkit-text-size-adjust: 100%; overscroll-behavior: none;
 }
 button {
   font: inherit; background: none; border: 1px solid var(--ink); color: var(--ink);
-  padding: 4px 12px; cursor: pointer; border-radius: 2px;
+  padding: 6px 14px; cursor: pointer; border-radius: 2px;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 button:active { background: var(--ink); color: var(--paper); }
 @media (hover: hover) { button:hover { background: var(--ink); color: var(--paper); } }
-.key { color: var(--faint); margin-left: 4px; }
+button[disabled] { opacity: .4; cursor: default; }
+.key { color: var(--faint); margin-left: 6px; }
 button:hover .key, button:active .key { color: var(--paper); }
+.cap { color: var(--faint); text-align: center; margin: 6px 0 0; font-size: 12px; }
 
-/* ---------- wide: log | map | status ---------- */
-#game {
-  display: grid; gap: 24px; padding: 24px; min-height: 100vh;
-  grid-template-columns: 280px auto 200px;
-  grid-template-areas: "log map status";
-  align-items: start; justify-content: center;
-}
-#log { grid-area: log; }
-#mapwrap { grid-area: map; }
-#status { grid-area: status; }
-
-#log {
-  height: calc(100vh - 48px); overflow: hidden; display: flex; flex-direction: column; gap: 6px;
-  border-right: 1px solid var(--rule); padding-right: 16px;
-}
+#game { display: grid; grid-template-columns: minmax(0, 560px) 260px; gap: 32px;
+  padding: 32px; height: 100vh; justify-content: center; align-items: stretch; }
+#left { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+/* the log fills what is left and spills off the top, so the newest line is
+   always the one at the bottom and the buttons never get pushed away */
+#log { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex;
+  flex-direction: column; gap: 8px; justify-content: flex-end;
+  padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
 #log p { margin: 0; }
-#log p:nth-child(n+2) { opacity: .75; }
-#log p:nth-child(n+4) { opacity: .5; }
-#log p:nth-child(n+8) { opacity: .3; }
+#log p:nth-last-child(n+2) { opacity: .8; }
+#log p:nth-last-child(n+5) { opacity: .55; }
+#log p:nth-last-child(n+9) { opacity: .32; }
+#log p:nth-last-child(n+14) { opacity: .16; }
+#act { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; }
+#act .ask { flex-basis: 100%; margin: 0 0 4px; }
 
-#mapwrap { position: relative; }
-#map { display: block; border: 1px solid var(--rule); touch-action: manipulation; }
+#side { overflow-y: auto; max-height: 100%; }
+#side .stat { display: flex; justify-content: space-between;
+  border-bottom: 1px solid var(--rule); padding: 5px 0; }
+#side .buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+#mapwrap { margin-bottom: 20px; }
+#sketch { display: block; border: 1px solid var(--rule); max-width: 100%; }
 
-#prompt {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; padding: 8px;
-}
-#prompt > * { background: var(--paper); max-width: 100%; }
-#prompt p { margin: 0; padding: 16px 20px; border: 1px solid var(--ink); border-bottom: 0; text-align: center; }
-#prompt .buttons { display: flex; border: 1px solid var(--ink); width: 100%; max-width: 260px; }
-#prompt .buttons button { border: 0; flex: 1; padding: 12px 20px; }
-#prompt .buttons button + button { border-left: 1px solid var(--ink); }
-
-#status .stat { display: flex; justify-content: space-between; border-bottom: 1px solid var(--rule); padding: 4px 0; }
-#status .help { color: var(--faint); margin: 16px 0; }
-#status .buttons { display: flex; flex-direction: column; gap: 8px; }
-#status .buttons button { width: 100%; }
-
-/* the d-pad: hidden where there is a keyboard */
-#pad { display: none; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 16px 0; }
-#pad button { padding: 0; height: 48px; font-size: 16px; }
-#pad button:nth-child(1) { grid-column: 2; grid-row: 1; }
-#pad button:nth-child(2) { grid-column: 1; grid-row: 2; }
-#pad button:nth-child(3) { grid-column: 2; grid-row: 2; }
-#pad button:nth-child(4) { grid-column: 3; grid-row: 2; }
-@media (hover: none), (pointer: coarse) { #pad { display: grid; } }
-
-/* ---------- game over ---------- */
-#overlay {
-  position: fixed; inset: 0; background: var(--paper); display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px; align-items: center; gap: 24px;
-  padding: 24px; overflow: auto;
-}
+#overlay { position: fixed; inset: 0; background: var(--paper); display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px; align-items: center; gap: 32px;
+  padding: 32px; overflow: auto; }
 #stage { position: relative; display: grid; place-items: center; min-width: 0; }
-#zoom, #solid { display: block; margin: 0 auto; max-width: 100%; grid-area: 1 / 1;
-  transition: opacity .9s ease; }
+#pieces, #solid, #finalmap { display: block; margin: 0 auto; max-width: 100%;
+  grid-area: 1 / 1; }
 #solid { touch-action: none; cursor: grab; }
 #solid:active { cursor: grabbing; }
-#stage-hint { grid-area: 2 / 1; margin: 8px 0 0; color: var(--faint); text-align: center; }
+#stage-hint { grid-area: 2 / 1; margin: 10px 0 0; color: var(--faint); text-align: center; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 #reveal { animation: fade-in .9s ease both; }
 @media (prefers-reduced-motion: reduce) { #reveal { animation-duration: .01s; } }
-#reveal h1 { font-size: 16px; font-weight: bold; margin: 0 0 12px; }
-#reveal p { margin: 0 0 12px; }
-#reveal .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-#reveal .buttons button { flex: 1; min-width: 130px; padding: 10px 12px; }
+#reveal h1 { font-size: 16px; margin: 0 0 14px; }
+#reveal p { margin: 0 0 14px; }
+#reveal .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+#reveal .buttons button { flex: 1; min-width: 110px; }
+#reveal .buttons button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 
-/* ---------- narrow: map, status, log ---------- */
 @media (max-width: 900px) {
-  #game {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "map" "status" "log";
-    gap: 16px; padding: 12px; padding-bottom: calc(12px + var(--pad));
-    justify-content: stretch; min-height: 100dvh;
-  }
-  #mapwrap { justify-self: center; max-width: 100%; }
-  #log {
-    height: auto; max-height: 34vh; border-right: 0; padding-right: 0;
-    border-top: 1px solid var(--rule); padding-top: 12px;
-  }
-  #status .help { margin: 12px 0; font-size: 12px; }
-  #status .buttons { flex-direction: row; }
-  #overlay {
-    grid-template-columns: minmax(0, 1fr); align-content: start; gap: 16px;
-    padding: 16px; padding-bottom: calc(16px + var(--pad));
-  }
+  /* let the page scroll rather than squeezing the log to nothing once the
+     map is open */
+  #game { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; gap: 16px;
+    padding: 16px; padding-bottom: calc(16px + var(--safe)); height: auto; min-height: 100dvh; }
+  #left { min-height: 0; }
+  #log { flex: 0 0 auto; height: 46vh; }
+  #side { overflow-y: visible; max-height: none; }
+  #sketch { margin: 0 auto; }
+  #side .buttons { flex-direction: row; flex-wrap: wrap; }
+  #side .buttons button { flex: 1; min-width: 110px; }
+  #overlay { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 18px;
+    padding: 16px; padding-bottom: calc(16px + var(--safe)); }
 }

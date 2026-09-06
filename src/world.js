@@ -15,7 +15,9 @@ export const TERRAIN = {
 export class World {
   constructor(seed, opts = {}) {
     this.seed = seed;
-    this.poly = new Polygon(opts);
+    // Either describe a polygon or hand one over; the terrain is laid out on
+    // whatever rectangle that polygon actually chose.
+    this.poly = opts.poly || new Polygon(opts);
     this.tiles = new Map();
     const rng = mulberry32(hashSeed('terrain:' + seed));
     const entries = Object.entries(TERRAIN).filter(([, t]) => t.weight > 0);

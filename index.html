@@ -4,11 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>A Twisting Forest</title>
-<meta name="description" content="An unfolding text game whose map is a surface you sew together as you walk.">
+<meta name="description" content="You walk in the dark until the paths start repeating. What you agree to becomes the shape of the world.">
 <meta name="theme-color" content="#f4efe6">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Twisting Forest">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -17,40 +16,32 @@
 </head>
 <body>
 <main id="game">
-  <section id="mapwrap">
-    <canvas id="map"></canvas>
-    <div id="prompt" hidden>
-      <p id="prompt-text"></p>
-      <div class="buttons">
-        <button id="yes">yes <span class="key">y</span></button>
-        <button id="no">no <span class="key">n</span></button>
-      </div>
-    </div>
+  <section id="left">
+    <section id="log" aria-live="polite"></section>
+    <section id="act"></section>
   </section>
-  <aside id="status">
-    <div class="stat"><span>supplies</span><b id="supplies"></b></div>
-    <div class="stat"><span>steps</span><b id="steps"></b></div>
-    <div class="stat"><span>edges sewn</span><b id="sewn"></b></div>
+  <aside id="side">
+    <section id="mapwrap" hidden>
+      <canvas id="sketch"></canvas>
+      <p class="cap">what you remember</p>
+    </section>
+    <div class="stat"><span>food</span><b id="supplies"></b></div>
+    <div class="stat"><span>hours walked</span><b id="steps"></b></div>
+    <div class="stat"><span>loops closed</span><b id="loops"></b></div>
     <div class="stat"><span>seed</span><b id="seed"></b></div>
-    <nav id="pad" aria-label="walk">
-      <button data-dir="0,1" aria-label="north">&#9650;</button>
-      <button data-dir="-1,0" aria-label="west">&#9664;</button>
-      <button data-dir="0,-1" aria-label="south">&#9660;</button>
-      <button data-dir="1,0" aria-label="east">&#9654;</button>
-    </nav>
-    <p class="help">tap the map to walk, or use arrows, wasd, hjkl.</p>
     <div class="buttons">
+      <button id="map" hidden>the map</button>
       <button id="lie-down">lie down</button>
-      <button id="new-world">new world</button>
+      <button id="new-world">start again</button>
     </div>
   </aside>
-  <section id="log" aria-live="polite"></section>
 </main>
 <div id="overlay" hidden>
   <div id="stage">
-    <canvas id="zoom"></canvas>
+    <canvas id="pieces"></canvas>
     <canvas id="solid" hidden></canvas>
-    <p id="stage-hint" hidden>drag to turn it over</p>
+    <canvas id="finalmap" hidden></canvas>
+    <p id="stage-hint"></p>
   </div>
   <section id="reveal" hidden>
     <h1>the world</h1>
@@ -58,9 +49,13 @@
     <p id="reveal-detail"></p>
     <p id="reveal-stats"></p>
     <div class="buttons">
-      <button id="flip">show the flat map</button>
+      <button data-view="pieces">the pieces</button>
+      <button data-view="solid">the world</button>
+      <button data-view="finalmap">your map</button>
+    </div>
+    <div class="buttons">
       <button id="again">begin again</button>
-      <button id="same">same world</button>
+      <button id="same">same seed</button>
     </div>
   </section>
 </div>

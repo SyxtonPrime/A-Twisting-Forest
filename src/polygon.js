@@ -25,11 +25,25 @@ export function transpose(A) { return [A[0], A[2], A[1], A[3]]; }
 export function det(A) { return A[0] * A[3] - A[1] * A[2]; }
 
 export class Polygon {
-  constructor({ sides = 16, len = 6 } = {}) {
-    if (sides % 4 !== 0 || sides < 4) throw new Error('sides must be a positive multiple of 4');
+  // `off` slides the polygon's corners around the rim. It exists because a
+  // polygon corner sitting exactly on a corner of the rectangle, with its two
+  // edges glued to each other, makes that one cell fold onto itself: opposite
+  // corners of the quad become the same point and it stops being a quad. Slide
+  // the corners off the rectangle's own and the fold happens between two
+  // cells instead of inside one.
+  constructor({ sides = 16, len = 6, off = 0, width = null } = {}) {
+    if (sides < 3 || sides % 1) throw new Error('sides must be a whole number, at least 3');
+    if (len < 1 || len % 1) throw new Error('len must be a whole number, at least 1');
+    const perimeter = sides * len;
+    if (perimeter % 2) throw new Error('sides * len must be even to close a rectangle');
     this.n = sides;
     this.k = len;
-    this.W = this.H = (sides / 4) * len;
+    // Any rectangle whose perimeter is the polygon's will do. Keeping it as
+    // square as possible keeps the cells near the middle of the world.
+    this.off = ((off % perimeter) + perimeter) % perimeter;
+    this.W = width === null ? Math.max(1, Math.round(perimeter / 4)) : width;
+    this.H = perimeter / 2 - this.W;
+    if (this.H < 1 || this.W < 1) throw new Error('rectangle would be degenerate');
     // Unit edges of the rim, counterclockwise from the bottom-left corner.
     this.boundary = [];
     for (let x = 0; x < this.W; x++) this.boundary.push({ cell: [x, 0], side: S });
@@ -43,7 +57,10 @@ export class Polygon {
 
   inside([x, y]) { return x >= 0 && y >= 0 && x < this.W && y < this.H; }
   centre() { return [Math.floor(this.W / 2), Math.floor(this.H / 2)]; }
-  edgeOf(idx) { return Math.floor(idx / this.k); }
+  get P() { return this.n * this.k; }
+  rel(idx) { return (idx - this.off + this.P) % this.P; }
+  edgeOf(idx) { return Math.floor(this.rel(idx) / this.k); }
+  unitAt(edge, s) { return (this.off + edge * this.k + s) % this.P; }
   unitIndex(cell, side) { const i = this.index.get(key(cell) + ':' + side); return i === undefined ? -1 : i; }
   isFree(i) { return this.pairs[i] === null; }
   pairCount() { return this.pairs.filter(Boolean).length / 2; }
@@ -78,9 +95,9 @@ export class Polygon {
   // Land across unit edge idx if its polygon edge were paired with j (way o).
   // Returns the landing cell and the matrix T carrying old headings to new.
   landing(idx, j, o) {
-    const i = this.edgeOf(idx), s = idx - i * this.k;
+    const r = this.rel(idx), i = Math.floor(r / this.k), s = r - i * this.k;
     const s2 = o === 1 ? s : this.k - 1 - s;
-    const idx2 = j * this.k + s2;
+    const idx2 = this.unitAt(j, s2);
     const a = this.boundary[idx], b = this.boundary[idx2];
     const d = DIRS[a.side], d2 = DIRS[b.side];       // outward normals
     const tau = rot90(d), tau2 = rot90(d2);          // counterclockwise tangents
@@ -99,7 +116,8 @@ export class Polygon {
   // Polygon vertex i sits at the start of edge i. Squares in its corner:
   // one at the rectangle's corners, two along a straight run.
   cornerSquares(i) {
-    const a = this.boundary[i * this.k], b = this.boundary[(i * this.k + this.n * this.k - 1) % (this.n * this.k)];
+    const at = this.unitAt(i, 0);
+    const a = this.boundary[at], b = this.boundary[(at + this.P - 1) % this.P];
     return a.side === b.side ? 2 : 1;
   }
 
@@ -162,6 +180,65 @@ export class Polygon {
       classes: [...classes.values()],
     };
   }
+}
+
+// The classification theorem's normal form, as a polygon with its edges
+// paired. h handles and r crosscaps; when there is any crosscap at all a
+// handle is worth two more of them, which is Dyck's theorem, so the whole
+// thing collapses to 2h + r crosscaps.
+function blank(sides, len) {
+  // Corners of the rectangle land on multiples of len; corners of the polygon
+  // land one step off them. So the two never coincide and no cell can fold.
+  const perimeter = sides * len;
+  const half = perimeter / 2;
+  let W = len * Math.max(1, Math.round(perimeter / (4 * len)));
+  W = Math.min(W, half - len);
+  if (W < 1 || half - W < 1) W = Math.floor(half / 2);
+  return new Polygon({ sides, len, off: 1, width: W });
+}
+
+// How many sides the normal form of this surface needs.
+export function normalFormSides(h, r) {
+  if (r > 0) { const k = 2 * h + r; return k === 1 ? 4 : 2 * k; }
+  return h === 0 ? 4 : 4 * h;
+}
+
+// Subdivide so the mesh has roughly the same number of cells whatever the
+// surface: a four-sided normal form needs far longer edges than a twenty-
+// sided one to end up with a solid that is not all corners.
+export function normalFormLen(h, r, cells = 620) {
+  const sides = normalFormSides(h, r);
+  const halfPerimeter = Math.max(2, Math.round(2 * Math.sqrt(cells)));
+  let len = Math.max(3, Math.round((2 * halfPerimeter) / sides));
+  if ((sides * len) % 2) len += 1;
+  return len;
+}
+
+export function normalForm(h, r, len = null) {
+  if (len === null) len = normalFormLen(h, r);
+  if (len < 2) throw new Error('normal form needs len at least 2');
+  if (r > 0) {
+    const k = 2 * h + r;
+    if (k === 1) {                                   // a b a b, the same as aa
+      const p = blank(4, len);
+      p.glue(0, 2, 1); p.glue(1, 3, 1);
+      return p;
+    }
+    const p = blank(2 * k, len);
+    for (let i = 0; i < k; i++) p.glue(2 * i, 2 * i + 1, 1);   // a a
+    return p;
+  }
+  if (h === 0) {
+    const p = blank(4, len);                         // a a^-1 b b^-1
+    p.glue(0, 1, -1); p.glue(2, 3, -1);
+    return p;
+  }
+  const p = blank(4 * h, len);                       // a b a^-1 b^-1
+  for (let i = 0; i < h; i++) {
+    p.glue(4 * i, 4 * i + 2, -1);
+    p.glue(4 * i + 1, 4 * i + 3, -1);
+  }
+  return p;
 }
 
 export function surfaceName(chi, orientable) {
