@@ -95,18 +95,36 @@ export function buildHandlebody(tubeTwists) {
   geom.L = L;
   geom.prof = prof;
 
+  // The body follows a shallow arc rather than a straight line. A straight
+  // capsule reads as a rail with things bolted to it; bending it puts the
+  // tubes on the outside of a curve, where they splay apart the way they do
+  // in a drawn pretzel.
+  const sweep = Math.max(0.3, Math.min(1.15, L * 0.09));
+  const bendR = L / sweep;
+  const spine = x => {
+    const a = x / bendR;
+    return { p: [bendR * Math.sin(a), -bendR * (1 - Math.cos(a)), 0],
+             N: [Math.sin(a), Math.cos(a), 0],       // out on the convex side
+             B: [0, 0, 1] };
+  };
+  geom.spine = { bendR, sweep };
+
   const grid = [];                       // grid[j][k], poles at j = 0 and M
   for (let j = 0; j <= M; j++) {
+    const f = spine(prof[j].x);
     if (j === 0 || j === M) {
       grid.push(new Array(C).fill(pos.length));
-      pos.push([prof[j].x, 0, 0]);
+      pos.push(f.p);
       continue;
     }
     const row = [];
     for (let k = 0; k < C; k++) {
       const th = (k / C) * Math.PI * 2;
+      const c = Math.cos(th) * prof[j].r, d = Math.sin(th) * prof[j].r;
       row.push(pos.length);
-      pos.push([prof[j].x, prof[j].r * Math.cos(th), prof[j].r * Math.sin(th)]);
+      pos.push([f.p[0] + f.N[0] * c + f.B[0] * d,
+                f.p[1] + f.N[1] * c + f.B[1] * d,
+                f.p[2] + f.N[2] * c + f.B[2] * d]);
     }
     grid.push(row);
   }
@@ -162,8 +180,8 @@ export function buildHandlebody(tubeTwists) {
     const hA = holes[i * 2], hB = holes[i * 2 + 1];
     const loopA = loopOf(hA), loopB = loopOf(hB);
     const cA = centre(pos, loopA), cB = centre(pos, loopB);
-    const nA = norm([0, cA[1], cA[2]]), nB = norm([0, cB[1], cB[2]]);
-    const up = [0, 1, 0];
+    const half = Math.floor(P / 2);
+    const nA = spine(prof[hA.j + half].x).N, nB = spine(prof[hB.j + half].x).N;
     const along = norm(sub(cB, cA));
 
     // A plain semicircle from one foot to the other. Waypoints joined by a
@@ -172,24 +190,28 @@ export function buildHandlebody(tubeTwists) {
     // under it is round and the whole thing reads as one piece with a hole in
     // it. Both feet sit on top of the capsule, so the circle's centre is the
     // point between them and its radius is half their distance.
-    const O = [(cA[0] + cB[0]) / 2, (cA[1] + cB[1]) / 2, (cA[2] + cB[2]) / 2];
-    const arcR = Math.hypot(cB[0] - cA[0], cB[1] - cA[1], cB[2] - cA[2]) / 2;
-    const sign = cB[0] > cA[0] ? 1 : -1;
-    const arc = (ang, scale = 1) =>
-      [O[0] + sign * Math.cos(ang) * arcR * scale, O[1] + Math.sin(ang) * arcR * scale, O[2]];
+    // The semicircle lives in the plane through both feet and their outward
+    // normals, so it still stands up straight once the body is bent.
+    const O = mul(add(cA, cB), 0.5);
+    const arcR = len(sub(cB, cA)) / 2;
+    const u = norm(sub(cA, O));                       // O towards the near foot
+    const navg = norm(add(nA, nB));
+    const w = norm(sub(navg, mul(u, dot(navg, u))));  // out, square to the chord
+    const arc = (phi, scale = 1) =>
+      add(O, mul(add(mul(u, Math.cos(phi)), mul(w, Math.sin(phi))), arcR * scale));
 
     const centres = [], frames = [];
     if (twisted) {
       // over the top, out past the far foot, then down and back in through
       // the wall, which is the only way a twisted tube closes up in space
       const way = [cA,
-        arc(Math.PI * 0.86), arc(Math.PI * 0.5), arc(Math.PI * 0.16, 1.04),
-        arc(-Math.PI * 0.12, 1.12), arc(-Math.PI * 0.34, 1.06),
-        add(cB, mul(up, -RBAR * 1.5)),
+        arc(Math.PI * 0.14), arc(Math.PI * 0.5), arc(Math.PI * 0.84, 1.04),
+        arc(Math.PI * 1.12, 1.12), arc(Math.PI * 1.34, 1.06),
+        add(cB, mul(nB, -RBAR * 1.5)),
         cB];
       for (let s = 0; s <= SEG; s++) centres.push(catmull(way, s / SEG));
     } else {
-      for (let s = 0; s <= SEG; s++) centres.push(arc(Math.PI * (1 - s / SEG)));
+      for (let s = 0; s <= SEG; s++) centres.push(arc(Math.PI * (s / SEG)));
     }
     let U = perp(norm(sub(centres[1], centres[0])), sub(pos[loopA[0]], cA));
     for (let s = 0; s <= SEG; s++) {
@@ -253,7 +275,7 @@ export function buildHandlebody(tubeTwists) {
         faceRGB(STONE);
       }
     }
-    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames, rings });
+    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames, rings, holeA: hA, holeB: hB });
   }
 
   const packed = pack(pos, faces, rgb);

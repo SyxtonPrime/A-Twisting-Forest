@@ -228,21 +228,30 @@ export class Solid {
       const rgb = path.rgb;
       const col = 0xff000000 | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
       const pts = path.pts;
-      let prev = null;
+      let prev = null, phase = 0;
       for (let i = 0; i < pts.length; i++) {
         const p = this.point(c, pts[i][0], pts[i][1], pts[i][2]);
-        if (prev && prev[3] > 0.06 && p[3] > 0.06) this.segment(prev, p, col, path.wide);
+        if (prev && prev[3] > 0.06 && p[3] > 0.06) {
+          phase = this.segment(prev, p, col, path.wide, path.dash, phase);
+        }
         prev = p;
       }
-      if (path.dot) this.blob(this.point(c, path.dot[0], path.dot[1], path.dot[2]), col);
+      if (path.dot) this.blob(this.point(c, path.dot[0], path.dot[1], path.dot[2]), col, path.r || 2);
     }
   }
 
-  segment(a, b, col, wide) {
+  // `dash` is the on/off run in pixels; `phase` carries across the segments of
+  // a polyline so the dashes do not restart at every corner.
+  segment(a, b, col, wide, dash, phase = 0) {
     const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1])));
     const px = this.px, depth = this.depth, w = this.w, h = this.h;
+    const step = Math.hypot(b[0] - a[0], b[1] - a[1]) / steps;
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
+      if (dash) {
+        phase += step;
+        if (Math.floor(phase / dash) % 2 === 1) continue;
+      }
       const x = Math.round(a[0] + (b[0] - a[0]) * t);
       const y = Math.round(a[1] + (b[1] - a[1]) * t);
       const z = (a[2] + (b[2] - a[2]) * t) * 1.008;   // bias, so it wins its own surface
@@ -255,15 +264,16 @@ export class Solid {
         }
       }
     }
+    return phase;
   }
 
-  blob(p, col) {
+  blob(p, col, r = 2) {
     if (p[3] <= 0.06) return;
     const px = this.px, depth = this.depth, w = this.w, h = this.h;
     const z = p[2] * 1.012;
-    for (let dy = -2; dy <= 2; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        if (dx * dx + dy * dy > 5) continue;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r + 1) continue;
         const xx = Math.round(p[0]) + dx, yy = Math.round(p[1]) + dy;
         if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
         const o = yy * w + xx;

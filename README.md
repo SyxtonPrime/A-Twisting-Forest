@@ -85,6 +85,10 @@ approximated: the tests check the built mesh's Euler characteristic and
 orientability against what the normal-form polygon says, by a separate route,
 and check it is a closed manifold with every edge bordering exactly two faces.
 
+The body follows a shallow arc rather than a straight line. A straight capsule
+reads as a rail with things bolted to it; bending it puts the tubes on the
+outside of a curve, where they splay apart the way they do in a drawn pretzel.
+
 Each arch is a plain semicircle from one foot to the other. Waypoints joined
 by a spline gave a pointed arch, which reads as a hoop stood on a rail; a
 circle leaves both feet straight up and comes over evenly, so the hole under it
@@ -104,17 +108,31 @@ back up into its hole from inside the capsule. You can watch it go through the
 wall. It is all one material, because colouring the tubes differently only
 made it look like a diagram.
 
-**And the walk on the solid.** A button draws your paths onto it. The tree
-lies on the capsule, because a tree lies flat on a sphere. Each loop you closed
-climbs to its handle: the first of a pair goes through the tube, and the second
-goes up and rings it once, which is the other independent way to walk a handle
-and the reason two loops need only one tube between them.
+**And the map on the solid.** A button draws it: a faint grid over the whole
+surface, a waypoint at the places worth marking, and your journey between them
+as a dotted line. The tree lies on the body, because a tree lies flat on a
+sphere. Each loop you closed climbs to its handle: the first of a pair goes
+through the tube, and the second goes up and rings it once, which is the other
+independent way to walk a handle and the reason two loops need only one tube
+between them.
 
-Every point of it is a vertex of the actual mesh, interpolated and nudged out
-along the surface, rather than a point worked out from the shape the mesh
-started as. The mesh is smoothed after it is built, so anything placed by the
-original arithmetic sinks into it or floats off it near the joins, which is
-exactly where the interesting parts of the walk are.
+Every point of it is read off the mesh, interpolated between real vertices and
+nudged out along the surface. The body is bent and then smoothed, so anything
+placed by the arithmetic the mesh was built from sinks into it or floats off it
+near the joins, which is exactly where the interesting parts of the walk are.
+
+Two things had to give for it to be legible. The places are laid out in the
+body's own coordinates rather than on a flat sheet that is then wrapped round
+it, since wrapping squashes one direction against the other; and distances
+round the body are scaled by how wide it is, so the tapering ends do not get
+crowded. And not every clearing gets a waypoint. Eighty hours of walking leaves
+seventy-odd places, and marking all of them buries the trail under its own
+dots, so only the camp, the dead fire, the junctions and anywhere with
+something to be had are marked.
+
+Even so, a walk of that length has a tree with a diameter of forty-odd hops,
+and there is no laying that flat on a small world without it coiling. The
+coiling is honest. It is what a long walk on a small world looks like.
 
 An earlier version meshed the normal-form polygon and let a physical
 relaxation find a shape, with springs, repulsion, surface tension and pressure.
