@@ -142,9 +142,12 @@ export function drawWorldMap(canvas, ex, w, h) {
     if (n.isCamp) { ctx.fillStyle = CAMP; ctx.fillText('camp', p[0], p[1] + 9); }
   }
 
-  // and the loops, arching over as tubes
-  const tubes = ex.merges.map((m, i) => ({ ...m, i, edge: ex.edges[m.edge] }))
-    .filter(t => t.edge && index.has(t.edge.a.node) && index.has(t.edge.b.node));
+  // and the loops. A handle carries two of them, so loops pair up: the first
+  // of a pair goes through the tube, the second goes round it.
+  const has = e => e && index.has(e.a.node) && index.has(e.b.node);
+  const tubes = ex.tubePlan()
+    .map(t => ({ ...t, edge: ex.edges[t.through.edge], ringEdge: t.around ? ex.edges[t.around.edge] : null }))
+    .filter(t => has(t.edge));
   // The tubes nest outside the sphere, and the outermost has to fit on the
   // paper however many of them there are.
   const maxRo = side / 2 - 12;
@@ -154,11 +157,11 @@ export function drawWorldMap(canvas, ex, w, h) {
   tubes.forEach((t, k) => {
     const p = at(index.get(t.edge.a.node));
     const q = at(index.get(t.edge.b.node));
-    const colour = t.twist ? TWISTED : HANDLE;
+    const colour = t.twisted ? TWISTED : HANDLE;
     const ro = R + 14 + k * gap;
     const line = arch(p, q, cx, cy, ro);
     const hw = Math.max(4, Math.min(8, gap ? gap * 0.5 : 8));
-    const [sa, sb] = band(line, hw, t.twist);
+    const [sa, sb] = band(line, hw, t.twisted);
 
     // filled, so it reads as passing over the sphere rather than drawn on it
     poly(ctx, sa.concat(sb.slice().reverse()));
@@ -167,6 +170,19 @@ export function drawWorldMap(canvas, ex, w, h) {
     ctx.strokeStyle = colour; ctx.lineWidth = 1.6;
     poly(ctx, sa); ctx.stroke();
     poly(ctx, sb); ctx.stroke();
+
+    // a loop that went round the handle rather than through it
+    if (t.ringEdge && has(t.ringEdge)) {
+      const m = Math.floor(line.length / 2);
+      const a = line[m - 2], b = line[m + 2];
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      ctx.save();
+      ctx.translate(line[m][0], line[m][1]);
+      ctx.rotate(ang);
+      ctx.beginPath(); ctx.ellipse(0, 0, hw * 0.62, hw * 1.75, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = colour; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.restore();
+    }
 
     // the holes it is glued into, drawn square to the way the tube leaves
     for (const [end, near] of [[p, line[2]], [q, line[line.length - 3]]]) {
@@ -181,12 +197,13 @@ export function drawWorldMap(canvas, ex, w, h) {
     }
   });
 
-  legend(ctx, w, h, ex.merges);
+  legend(ctx, w, h, ex.tubePlan(), ex.merges.length);
 }
 
-function legend(ctx, w, h, merges) {
-  const twisted = merges.filter(m => m.twist).length;
-  const plain = merges.length - twisted;
+function legend(ctx, w, h, plan, loops) {
+  const twisted = plan.filter(t => t.twisted).length;
+  const plain = plan.length - twisted;
+  const merges = plan;
   const y = h - 14;
   let x = 16;
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -208,4 +225,8 @@ function legend(ctx, w, h, merges) {
   if (plain) item(HANDLE, false, `${plain} handle${plain === 1 ? '' : 's'}`);
   if (twisted) item(TWISTED, true, `${twisted} twisted (klein)`);
   if (!merges.length) { ctx.fillStyle = FAINT; ctx.fillText('no loop closed: a sphere', x, y); }
+  else {
+    ctx.fillStyle = FAINT;
+    ctx.fillText(`${loops} loop${loops === 1 ? '' : 's'} closed`, x, y);
+  }
 }

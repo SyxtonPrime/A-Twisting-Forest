@@ -19,15 +19,15 @@
 
 import { orientFaces } from './mesh.js';
 
-const C = 32;          // divisions round the capsule
-const P = 3;           // a hole is a P by P patch, so tubes are 4P-gons
+const C = 36;          // divisions round the capsule
+const P = 4;           // a hole is a P by P patch, so tubes are 4P-gons
 const RING = 4 * P;
-const SEG = 26;        // rings along a tube
+const SEG = 36;        // rings along a tube
 const RBAR = 1;
 
-const BAR_RGB = [188, 182, 164];
-const HANDLE_RGB = [64, 126, 120];
-const TWIST_RGB = [176, 74, 64];
+// One material throughout: the shape is the whole of what there is to see,
+// and colouring the tubes differently only made it look like a diagram.
+const STONE = [198, 191, 173];
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -54,6 +54,7 @@ function catmull(pts, t) {
 
 export function buildHandlebody(tubeTwists) {
   const n = tubeTwists.length;
+  const geom = { RBAR, tubes: [] };
   const pos = [];                       // [x, y, z] per vertex
   const faces = [];                     // [a, b, c, d], d repeated for a triangle
   const rgb = [];                       // one colour per face
@@ -78,6 +79,7 @@ export function buildHandlebody(tubeTwists) {
     prof.push({ x: L / 2 + RBAR * Math.sin(a), r: RBAR * Math.cos(a), cyl: false });
   }
   const M = prof.length - 1;
+  geom.L = L;
 
   const grid = [];                       // grid[j][k], poles at j = 0 and M
   for (let j = 0; j <= M; j++) {
@@ -125,7 +127,7 @@ export function buildHandlebody(tubeTwists) {
       if (removed.has(`${j},${k}`)) continue;
       const k2 = (k + 1) % C;
       faces.push([grid[j][k], grid[j][k2], grid[j + 1][k2], grid[j + 1][k]]);
-      faceRGB(BAR_RGB);
+      faceRGB(STONE);
     }
   }
 
@@ -150,14 +152,15 @@ export function buildHandlebody(tubeTwists) {
     const along = norm(sub(cB, cA));
 
     const way = twisted
-      ? [cA, add(cA, mul(nA, RBAR * 1.35)),
-         add(add(cA, mul(sub(cB, cA), 0.5)), mul(up, RBAR * 2.15)),
-         add(add(cB, mul(along, RBAR * 1.7)), mul(up, RBAR * 0.9)),
-         add(add(cB, mul(along, RBAR * 1.55)), mul(up, -RBAR * 0.35)),
-         add(add(cB, mul(along, RBAR * 0.55)), mul(up, -RBAR * 1.35)),  // in through the wall
+      ? [cA, add(cA, mul(nA, RBAR * 1.5)),
+         add(add(cA, mul(sub(cB, cA), 0.42)), mul(up, RBAR * 2.35)),
+         add(add(cB, mul(along, RBAR * 1.25)), mul(up, RBAR * 1.75)),
+         add(add(cB, mul(along, RBAR * 1.95)), mul(up, RBAR * 0.35)),
+         add(add(cB, mul(along, RBAR * 1.5)), mul(up, -RBAR * 0.95)),
+         add(add(cB, mul(along, RBAR * 0.45)), mul(up, -RBAR * 1.4)),   // in through the wall
          cB]
       : [cA, add(cA, mul(nA, RBAR * 1.25)),
-         add(add(cA, mul(sub(cB, cA), 0.5)), mul(up, RBAR * 1.95)),
+         add(add(cA, mul(sub(cB, cA), 0.5)), mul(up, RBAR * 2.05)),
          add(cB, mul(nB, RBAR * 1.25)), cB];
 
     // parallel transport a frame along the path so the tube does not wring
@@ -221,17 +224,19 @@ export function buildHandlebody(tubeTwists) {
       rings.push(row);
     }
 
-    const colour = twisted ? TWIST_RGB : HANDLE_RGB;
     for (let s = 0; s < SEG; s++) {
       for (let k = 0; k < RING; k++) {
         const k2 = (k + 1) % RING;
         faces.push([rings[s][k], rings[s][k2], rings[s + 1][k2], rings[s + 1][k]]);
-        faceRGB(colour);
+        faceRGB(STONE);
       }
     }
+    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames });
   }
 
-  return pack(pos, faces, rgb);
+  const packed = pack(pos, faces, rgb);
+  packed.geom = geom;
+  return packed;
 }
 
 function lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }

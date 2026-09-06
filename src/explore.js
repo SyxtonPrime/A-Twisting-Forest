@@ -269,25 +269,43 @@ export class Explore {
     return this.surface();
   }
 
-  // Every loop the player closed is a tube they walked through, and a tube
-  // glued onto a sphere is a handle. Glue it with a flip and it is a twisted
-  // handle, which is what turns a sphere into a klein bottle.
+  // A handle carries two independent loops, not one: you can walk through the
+  // tube, and you can walk around it. So closing a second loop need not add
+  // anything to the world. It may only mean you went round a handle that was
+  // already there.
   //
-  // A tube costs two from the euler characteristic whichever way it goes on,
-  // so chi is 2 - 2n however many are twisted. One twist anywhere makes the
-  // whole world non-orientable, and a non-orientable sphere with n tubes is
-  // 2n crosscaps. Nothing here can produce an odd euler characteristic, so
-  // the projective plane is not a world this forest can be.
+  // A sphere with t tubes carries 2t independent loops, so n loops need
+  // t = ceil(n / 2) of them. A tube costs two from the euler characteristic
+  // whichever way round it goes on, and one twist anywhere makes the whole
+  // world one-sided, in which case a sphere with t tubes is 2t crosscaps.
   surface() {
-    const tubes = this.merges.length;
+    const loops = this.merges.length;
     const twisted = this.merges.filter(m => m.twist).length;
+    const tubes = Math.ceil(loops / 2);
     const orientable = twisted === 0;
     return {
-      tubes, twisted, orientable,
+      loops, twisted, tubes, orientable,
       genus: orientable ? tubes : 0,
       caps: orientable ? 0 : 2 * tubes,
       chi: 2 - 2 * tubes,
     };
+  }
+
+  // Which loop went through which tube, and which went round one. Loops pair
+  // up in the order they were closed; an odd one out gets a tube to itself.
+  tubePlan() {
+    const plan = [];
+    for (let i = 0; i < this.merges.length; i += 2) {
+      const through = this.merges[i];
+      const around = this.merges[i + 1] || null;
+      plan.push({
+        through, around,
+        throughIndex: i,
+        aroundIndex: around ? i + 1 : -1,
+        twisted: !!(through.twist || (around && around.twist)),
+      });
+    }
+    return plan;
   }
 
   giveUp() { this.end('you lie down.'); }

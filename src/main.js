@@ -3,20 +3,21 @@ import { drawSketch } from './sketch.js';
 import { drawWorldMap } from './worldmap.js';
 import { normalForm } from './polygon.js';
 import { buildHandlebody } from './handlebody.js';
+import { walkOnSolid } from './overlay.js';
 import { Solid } from './scene3d.js';
 import { randomSeedWord } from './rng.js';
 
 const $ = id => document.getElementById(id);
 const settings = { revealDelay: 900 };
 
-let ex, solid, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
+let ex, solid, solidWalk = null, walkOn = true, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
 
 function start(seed) {
   const h = new URLSearchParams(location.hash.slice(1));
   const s = seed || h.get('seed') || randomSeedWord();
   location.hash = `seed=${s}`;
   if (solidRAF) cancelAnimationFrame(solidRAF);
-  solidRAF = 0; solid = null; revealed = false; mapOpen = false; view = 'map';
+  solidRAF = 0; solid = null; solidWalk = null; walkOn = true; revealed = false; mapOpen = false; view = 'map';
   ex = new Explore(s);
   $('overlay').hidden = true;
   $('reveal').hidden = true;
@@ -105,12 +106,16 @@ function reveal() {
 
 function describe(s, info) {
   $('reveal-name').textContent = `you were walking on ${info.name}.`;
-  const plain = s.tubes - s.twisted;
+  const plan = ex.tubePlan();
+  const twisted = plan.filter(t => t.twisted).length;
+  const plain = plan.length - twisted;
   const body = s.tubes === 0
     ? 'you never closed a loop, so the world stayed a sphere.'
-    : `a sphere with ${s.tubes} tube${s.tubes === 1 ? '' : 's'} through it: ` +
-      `${plain} glued straight on, ${s.twisted} with a half turn in ${s.twisted === 1 ? 'it' : 'them'}.` +
-      (s.twisted ? ' one half turn is enough to make the whole world one-sided.' : '');
+    : `you closed ${s.loops} loop${s.loops === 1 ? '' : 's'}. a handle carries two of them, ` +
+      `one through the tube and one round it, so that is ` +
+      `${s.tubes} tube${s.tubes === 1 ? '' : 's'}: ` +
+      `${plain} glued straight on, ${twisted} with a half turn.` +
+      (twisted ? ' one half turn is enough to make the whole world one-sided.' : '');
   $('reveal-detail').textContent = body + ` euler characteristic ${info.chi}, ` +
     `${info.orientable ? 'orientable' : 'not orientable'}.`;
   const st = ex.stats();
@@ -140,6 +145,7 @@ function setView(v) {
   $('solid').hidden = v !== 'solid';
   for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
     b.setAttribute('aria-pressed', String(b.dataset.view === v));
+  $('walk').hidden = v !== 'solid';
   $('stage-hint').textContent = v === 'solid'
     ? 'drag to turn it over'
     : 'everywhere you walked lies flat on the sphere, except the loops you closed';
@@ -149,9 +155,11 @@ function setView(v) {
 // The solid is built, not settled, so there is nothing to wait for: the
 // shape is right the moment it exists.
 function buildSolid() {
-  const mesh = buildHandlebody(ex.merges.map(m => !!m.twist));
+  const mesh = buildHandlebody(ex.tubePlan().map(t => t.twisted));
   solid = new Solid($('solid'), mesh, mesh.positions);
-  solid.el = 0.5;
+  solid.el = 0.42;
+  solidWalk = walkOnSolid(ex, mesh.geom);
+  solid.overlay = walkOn ? solidWalk : null;
   solid.resize(stageSide(), stageSide());
   const spin = () => {
     solidRAF = requestAnimationFrame(spin);
@@ -186,6 +194,11 @@ $('again').onclick = () => start(randomSeedWord());
 $('same').onclick = () => start(ex.seed);
 for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
   b.onclick = () => setView(b.dataset.view);
+$('walk').onclick = () => {
+  walkOn = !walkOn;
+  $('walk').textContent = walkOn ? 'hide the walk' : 'show the walk';
+  if (solid) { solid.overlay = walkOn ? solidWalk : null; solid.draw(); }
+};
 
 let resizeTimer;
 window.addEventListener('resize', () => {
@@ -194,4 +207,4 @@ window.addEventListener('resize', () => {
 });
 
 start();
-window.dev = { ex: () => ex, render, setMapOpen: v => { mapOpen = v; }, settings, solid: () => solid, setView };
+window.dev = { ex: () => ex, render, setWalk: v => { walkOn = v; if (solid) solid.overlay = v ? solidWalk : null; }, setMapOpen: v => { mapOpen = v; }, settings, solid: () => solid, setView };

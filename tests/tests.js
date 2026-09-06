@@ -421,7 +421,7 @@ test('explore: a refusal is never offered again', () => {
   }
 });
 
-test('explore: tubes, twists, and what surface they make', () => {
+test('explore: two loops to a handle, and what surface that makes', () => {
   const ex = new Explore('surface-test');
   const s = (plain, twist) => {
     ex.merges = [];
@@ -429,25 +429,52 @@ test('explore: tubes, twists, and what surface they make', () => {
     for (let i = 0; i < twist; i++) ex.merges.push({ twist: true, edge: plain + i });
     return ex.surface();
   };
-  eq(s(0, 0), { tubes: 0, twisted: 0, orientable: true, genus: 0, caps: 0, chi: 2 });
-  eq(s(2, 0), { tubes: 2, twisted: 0, orientable: true, genus: 2, caps: 0, chi: -2 });
-  eq(s(0, 1), { tubes: 1, twisted: 1, orientable: false, genus: 0, caps: 2, chi: 0 });
-  // a tube costs two from chi whichever way round it goes on
-  for (let n = 0; n <= 5; n++)
-    for (let t = 0; t <= n; t++)
-      eq(s(n - t, t).chi, 2 - 2 * n, `chi for ${n} tubes, ${t} twisted`);
-  // one twist anywhere is enough to make the whole world one-sided
-  eq(s(4, 1).orientable, false);
+  // a handle carries two loops, so a second loop can be free
+  eq(s(0, 0).tubes, 0);
+  eq(s(1, 0).tubes, 1);
+  eq(s(2, 0).tubes, 1, 'the second loop went round the handle, not through a new one');
+  eq(s(3, 0).tubes, 2);
+  eq(s(4, 0).tubes, 2);
+  eq(s(7, 0).tubes, 4);
+  // chi follows the tubes, not the loops
+  for (let n = 0; n <= 8; n++) {
+    const r = s(n, 0);
+    eq(r.chi, 2 - 2 * Math.ceil(n / 2), `chi for ${n} loops`);
+    ok(2 - r.chi >= n, `${n} loops must fit in the surface`);
+    ok(2 - (2 - 2 * Math.max(0, r.tubes - 1)) < n || r.tubes === 0,
+      `${n} loops would not fit in one tube fewer`);
+  }
+  // one twist anywhere is enough
   eq(s(4, 0).orientable, true);
+  eq(s(3, 1).orientable, false);
+  eq(s(0, 1), { loops: 1, twisted: 1, tubes: 1, orientable: false, genus: 0, caps: 2, chi: 0 });
   // and the polygon agrees about which surface that is
-  for (const [plain, twist, name] of [[0,0,'a sphere'], [1,0,'a torus'], [3,0,'a surface of genus 3'],
-                                      [0,1,'a klein bottle'], [1,1,'a surface with 4 crosscaps'],
-                                      [0,2,'a surface with 4 crosscaps']]) {
+  for (const [plain, twist, name] of [[0,0,'a sphere'], [1,0,'a torus'], [2,0,'a torus'],
+                                      [3,0,'a double torus'], [0,1,'a klein bottle'],
+                                      [3,1,'a surface with 4 crosscaps']]) {
     const r = s(plain, twist);
     const info = normalForm(r.genus, r.caps, 4).classify();
     eq(info.name, name, `${plain} plain, ${twist} twisted`);
     eq(info.chi, r.chi, `chi agrees for ${plain} plain, ${twist} twisted`);
     eq(info.orientable, r.orientable, `orientability agrees for ${plain} plain, ${twist} twisted`);
+  }
+});
+
+test('explore: the tube plan accounts for every loop exactly once', () => {
+  const ex = new Explore('plan-test');
+  for (let n = 0; n <= 9; n++) {
+    ex.merges = [];
+    for (let i = 0; i < n; i++) ex.merges.push({ twist: i % 3 === 0, edge: i });
+    const plan = ex.tubePlan();
+    eq(plan.length, ex.surface().tubes, `${n} loops make ${plan.length} tubes`);
+    const seen = [];
+    for (const t of plan) {
+      seen.push(t.throughIndex);
+      if (t.around) seen.push(t.aroundIndex);
+      eq(t.twisted, !!(t.through.twist || (t.around && t.around.twist)),
+        'a tube is twisted if either of its loops was');
+    }
+    eq(seen.sort((a, b) => a - b), [...Array(n).keys()], `${n} loops all placed once`);
   }
 });
 
@@ -485,7 +512,7 @@ test('explore: no loop can be closed after camp', () => {
   ex.supplies = 900;
   walk(ex, 300, true);
   eq(ex.surface(), before, 'so the shape cannot change');
-  eq(ex.loopEdges().size, before.tubes, 'and no new loop edges appeared');
+  eq(ex.loopEdges().size, before.loops, 'and no new loop edges appeared');
 });
 
 test('explore: a world with no loose ends offers camp whatever the food says', () => {

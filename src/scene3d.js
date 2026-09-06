@@ -110,27 +110,36 @@ export class Solid {
     return r || 1;
   }
 
+  camera() {
+    const r = this.radius();
+    return {
+      ca: Math.cos(this.az), sa: Math.sin(this.az),
+      ce: Math.cos(this.el), se: Math.sin(this.el),
+      dist: (r * 2.35) / this.zoom,           // close enough to fill the frame
+      f: 2.05 * Math.min(this.w, this.h) * 0.5,
+      cx: this.w / 2, cy: this.h / 2,
+    };
+  }
+
+  // [screen x, screen y, one over distance, distance]
+  point(c, x, y, z) {
+    const x1 = c.ca * x + c.sa * z;
+    const z1 = -c.sa * x + c.ca * z;
+    const y2 = c.ce * y - c.se * z1;
+    const z2 = c.se * y + c.ce * z1;
+    const d = c.dist - z2;
+    const inv = 1 / (d > 0.05 ? d : 0.05);
+    return [c.cx + c.f * x1 * inv, c.cy - c.f * y2 * inv, inv, d];
+  }
+
   project() {
     const { V } = this.mesh, pos = this.pos;
-    const ca = Math.cos(this.az), sa = Math.sin(this.az);
-    const ce = Math.cos(this.el), se = Math.sin(this.el);
-    const r = this.radius();
-    const dist = (r * 3.1) / this.zoom;
-    const f = 1.9 * Math.min(this.w, this.h) * 0.5;
-    const cx = this.w / 2, cy = this.h / 2;
+    const c = this.camera();
     for (let i = 0; i < V; i++) {
-      const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
-      const x1 = ca * x + sa * z;
-      const z1 = -sa * x + ca * z;
-      const y2 = ce * y - se * z1;
-      const z2 = se * y + ce * z1;
-      const d = dist - z2;                    // distance in front of the camera
-      const inv = 1 / (d > 0.05 ? d : 0.05);
-      this.sx[i] = cx + f * x1 * inv;
-      this.sy[i] = cy - f * y2 * inv;
-      this.sz[i] = inv;
-      this.vz[i] = d;
+      const p = this.point(c, pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+      this.sx[i] = p[0]; this.sy[i] = p[1]; this.sz[i] = p[2]; this.vz[i] = p[3];
     }
+    this.cam = c;
   }
 
   draw() {
@@ -166,6 +175,7 @@ export class Solid {
     }
 
     if (this.showSeams) this.seams();
+    if (this.overlay) this.drawOverlay();
     this.ctx.putImageData(this.img, 0, 0);
   }
 
@@ -207,6 +217,58 @@ export class Solid {
       const rgb = this.seamRGB[(ci === undefined ? 0 : ci) % this.seamRGB.length];
       const col = 0xff000000 | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
       this.line(a, b, col);
+    }
+  }
+
+  // Polylines given in world coordinates, depth tested against the solid so
+  // they disappear round the back of it.
+  drawOverlay() {
+    const c = this.cam;
+    for (const path of this.overlay) {
+      const rgb = path.rgb;
+      const col = 0xff000000 | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
+      const pts = path.pts;
+      let prev = null;
+      for (let i = 0; i < pts.length; i++) {
+        const p = this.point(c, pts[i][0], pts[i][1], pts[i][2]);
+        if (prev && prev[3] > 0.06 && p[3] > 0.06) this.segment(prev, p, col, path.wide);
+        prev = p;
+      }
+      if (path.dot) this.blob(this.point(c, path.dot[0], path.dot[1], path.dot[2]), col);
+    }
+  }
+
+  segment(a, b, col, wide) {
+    const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1])));
+    const px = this.px, depth = this.depth, w = this.w, h = this.h;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const x = Math.round(a[0] + (b[0] - a[0]) * t);
+      const y = Math.round(a[1] + (b[1] - a[1]) * t);
+      const z = (a[2] + (b[2] - a[2]) * t) * 1.008;   // bias, so it wins its own surface
+      for (let dy = wide ? -1 : 0; dy <= (wide ? 1 : 0); dy++) {
+        for (let dx = wide ? -1 : 0; dx <= (wide ? 1 : 0); dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const o = yy * w + xx;
+          if (z > depth[o]) { depth[o] = z; px[o] = col; }
+        }
+      }
+    }
+  }
+
+  blob(p, col) {
+    if (p[3] <= 0.06) return;
+    const px = this.px, depth = this.depth, w = this.w, h = this.h;
+    const z = p[2] * 1.012;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (dx * dx + dy * dy > 5) continue;
+        const xx = Math.round(p[0]) + dx, yy = Math.round(p[1]) + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const o = yy * w + xx;
+        if (z > depth[o]) { depth[o] = z; px[o] = col; }
+      }
     }
   }
 

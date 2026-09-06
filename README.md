@@ -45,19 +45,23 @@ path apart may sit far apart on the paper.
 
 Every loop you close is a tube you walked through, and a tube glued onto a
 sphere is a **handle**. Glue it with a flip and it is a **twisted handle**,
-which is what turns a sphere into a Klein bottle. So the world is always a
-sphere with one tube per loop:
+which is what turns a sphere into a Klein bottle.
 
-- close no loops and it stays a sphere
-- close two, both straight, and it is a two-holed torus
-- close two with one twisted and it is a surface with four crosscaps
+But a handle carries *two* independent loops, not one: you can walk through
+the tube, and you can walk around it. So closing a second loop need not add
+anything to the world. It may only mean you went round a handle that was
+already there. A sphere with `t` tubes carries `2t` independent loops, so `n`
+loops need `t = ceil(n / 2)` of them:
+
+| loops closed | 0 | 1 | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- | --- | --- |
+| tubes | 0 | 1 | 1 | 2 | 2 | 3 |
 
 A tube costs two from the Euler characteristic whichever way round it goes on,
-so `χ = 2 − 2n` for `n` loops, and one twist anywhere is enough to make the
-whole world one-sided. Nothing here can produce an odd Euler characteristic,
-so the projective plane is not a world this forest can be. That is the price
-of every piece being a tube you could actually walk through, and it seems a
-fair one.
+so `χ = 2 − 2t`, and one twist anywhere is enough to make the whole world
+one-sided. Nothing here can produce an odd Euler characteristic, so the
+projective plane is not a world this forest can be. That is the price of every
+piece being a tube you could actually walk through, and it seems a fair one.
 
 ## The two pictures at the end
 
@@ -74,25 +78,31 @@ So it is not a diagram beside the map. It is the map.
 
 **The solid.** The same surface as something you can drag, and it is built
 rather than found. A capsule stands for the sphere, one pair of holes is cut
-for each loop you closed, and a tube is stitched between each pair. Stitch the
-far end the same way round and it is an ordinary handle; stitch it reversed
-and it is a twisted handle, which is what makes a sphere into a Klein bottle.
-
-That reversal is the whole of the topology, and it is not approximated. The
-tests check the Euler characteristic and the orientability of the built mesh
-against what the normal-form polygon says, by a completely separate route.
+per tube, and a tube is stitched between each pair. Stitch the far end the same
+way round and it is an ordinary handle; stitch it reversed and it is a twisted
+handle. That reversal is the whole of the topology and none of it is
+approximated: the tests check the built mesh's Euler characteristic and
+orientability against what the normal-form polygon says, by a separate route,
+and check it is a closed manifold with every edge bordering exactly two faces.
 
 A twisted tube cannot close up in space without passing through something, so
 it is routed the way the classic picture routes it: over the top, round, and
 back up into its hole from inside the capsule. You can watch it go through the
-wall.
+wall. It is all one material, because colouring the tubes differently only
+made it look like a diagram.
+
+**And the walk on the solid.** A button draws your paths onto it. The tree
+lies on the capsule, because a tree lies flat on a sphere. Each loop you closed
+climbs to its handle: the first of a pair goes through the tube, and the second
+goes up and rings it once, which is the other independent way to walk a handle
+and the reason two loops need only one tube between them.
 
 An earlier version meshed the normal-form polygon and let a physical
-relaxation find a shape, with springs, repulsion, surface tension and
-pressure. It was honest and it looked like crumpled paper, because these
-surfaces are flat everywhere except at their cone points and nothing in that
-energy says "look like a pretzel". Building the classic picture directly is
-both prettier and more exact, so the relaxation is gone.
+relaxation find a shape, with springs, repulsion, surface tension and pressure.
+It was honest and it looked like crumpled paper, because these surfaces are
+flat everywhere except at their cone points and nothing in that energy says
+"look like a pretzel". Building the classic picture directly is both prettier
+and more exact, so the relaxation is gone.
 
 ## Layout
 
@@ -104,8 +114,9 @@ both prettier and more exact, so the relaxation is gone.
   the sphere, with the closed loops arching over as tubes.
 - `src/polygon.js` — a polygon with its edges paired, its normal forms, and
   the classification: Euler characteristic, orientability, cone points.
-- `src/handlebody.js` — the solid: a capsule, a pair of holes per loop, and a
+- `src/handlebody.js` — the solid: a capsule, a pair of holes per tube, and a
   stitched tube between each pair.
+- `src/overlay.js` — the walk drawn on the solid, depth tested against it.
 - `src/mesh.js` — the quotient mesh of a polygon, and the face-winding pass
   that decides orientability. The winding pass is what `handlebody.js` uses to
   check itself; the quotient mesh is now only used by the tests, where it is a
