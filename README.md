@@ -43,33 +43,36 @@ path apart may sit far apart on the paper.
 
 ## What the loops do
 
-Each loop you close is one independent cycle, and the shape of the world is
-read straight off them:
+Every loop you close is a tube you walked through, and a tube glued onto a
+sphere is a **handle**. Glue it with a flip and it is a **twisted handle**,
+which is what turns a sphere into a Klein bottle. So the world is always a
+sphere with one tube per loop:
 
-- a loop closed the same way round is a **handle**
-- a loop closed mirrored is a **crosscap**
+- close no loops and it stays a sphere
+- close two, both straight, and it is a two-holed torus
+- close two with one twisted and it is a surface with four crosscaps
 
-So the world is a sphere with one handle or crosscap per loop. Beside a
-crosscap a handle is worth two more crosscaps, which is Dyck's theorem, so a
-world with any twist in it collapses to crosscaps alone: close three loops
-with one of them mirrored and you were walking on a surface with five
-crosscaps, not on a two-holed torus with a twist.
+A tube costs two from the Euler characteristic whichever way round it goes on,
+so `χ = 2 − 2n` for `n` loops, and one twist anywhere is enough to make the
+whole world one-sided. Nothing here can produce an odd Euler characteristic,
+so the projective plane is not a world this forest can be. That is the price
+of every piece being a tube you could actually walk through, and it seems a
+fair one.
 
-Close no loops and it is a sphere. You walked in the dark for a day and the
-forest was just a forest.
+## The two pictures at the end
 
-## The three pictures at the end
+**The map.** The sphere with your walk on it. Every edge you walked except the
+ones that closed a loop went to a place that did not exist a moment before, so
+all of that is a spanning tree, and a tree lies flat on a sphere without
+crossing itself. The edges that did close a loop are exactly the ones that
+cannot lie flat: each of those arches over the outside as a tube. A tube whose
+loop came back mirrored is drawn with a half turn in it, so its two sides swap
+over and cross once in the middle. That crossing is the whole difference
+between a handle and a Klein bottle.
 
-**The pieces.** The world in normal form, drawn the way the classification
-theorem builds it: a central polygon standing for a sphere with one hole per
-loop, a cylinder out to each hole, and on the end of each cylinder the piece
-that loop turned out to be. A handle with one boundary circle is a pentagon,
-`a b a⁻¹ b⁻¹ c`, where `c` is the edge the cylinder attaches to. A crosscap is
-a triangle, `a a c`. Forcing both into pentagons would need a fold `b b⁻¹`
-that does no work and makes a spike in the mesh, so the shapes are left to
-differ, and the difference is the legend.
+So it is not a diagram beside the map. It is the map.
 
-**The world.** The same surface as a solid you can drag. It is built as a real
+**The solid.** The same surface as something you can drag, built as a real
 quad mesh from the normal-form polygon and relaxed into three dimensions.
 
 It is a picture of the topology, not of the metric, and it cannot be
@@ -91,15 +94,14 @@ bug; it is the only way such a world can sit in space. The renderer is a small
 z-buffered rasteriser written for exactly that reason, since painter's
 algorithm tears along those self-intersection curves.
 
-**Your map.** The sketch from camp again, with everywhere you got to.
-
 ## Layout
 
 - `src/explore.js` — stage one. The graph, the places, the question, the food,
   and making camp. Knows nothing about surfaces except how to count loops.
 - `src/sketch.js` — the map drawn at camp: force-directed layout, paths that
   came back mirrored drawn in red, ways you never took as stubs.
-- `src/pieces.js` — the normal-form diagram.
+- `src/worldmap.js` — the map at the end: the same walk laid out as a tree on
+  the sphere, with the closed loops arching over as tubes.
 - `src/polygon.js` — a polygon with its edges paired, its normal forms, and
   the classification: Euler characteristic, orientability, cone points.
 - `src/mesh.js` — the quotient mesh, and a face-winding pass that decides
@@ -137,5 +139,10 @@ drives headless Chrome:
 ./run-tests.sh
 ```
 
-`lab.html` renders the piece diagram across a range of surfaces. Nothing links
-to it; it is a workbench.
+There is a test that the walk minus its closed loops really is a spanning tree,
+since the end map is drawn on the assumption and would be nonsense otherwise.
+
+Once camp is made the forest stops asking whether places look familiar, so no
+further loop can be closed. That is what "the map is fixed" means, and it is
+also what keeps the rest of the walk drawable: a tree can always be added to a
+tree.

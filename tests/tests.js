@@ -404,22 +404,71 @@ test('explore: a refusal is never offered again', () => {
   }
 });
 
-test('explore: handles, crosscaps and Dyck', () => {
+test('explore: tubes, twists, and what surface they make', () => {
   const ex = new Explore('surface-test');
-  const s = (h, c) => { ex.merges = []; for (let i = 0; i < h; i++) ex.merges.push({ twist: false });
-                        for (let i = 0; i < c; i++) ex.merges.push({ twist: true }); return ex.surface(); };
-  eq(s(0, 0), { handles: 0, crosscaps: 0, orientable: true, genus: 0, caps: 0, loops: 0 });
-  eq(s(2, 0), { handles: 2, crosscaps: 0, orientable: true, genus: 2, caps: 0, loops: 2 });
-  eq(s(0, 3), { handles: 0, crosscaps: 3, orientable: false, genus: 0, caps: 3, loops: 3 });
-  // a handle beside a crosscap is worth three crosscaps
-  eq(s(1, 1).caps, 3);
-  eq(s(2, 1).caps, 5);
-  // and the surface that comes out of it is the one the polygon names
-  for (const [h, c, name] of [[0,0,'a sphere'], [1,0,'a torus'], [3,0,'a surface of genus 3'],
-                              [0,1,'a projective plane'], [0,2,'a klein bottle'], [1,1,'a surface with 3 crosscaps']]) {
-    const r = s(h, c);
-    eq(normalForm(r.handles, r.crosscaps, 4).classify().name, name, `h=${h} c=${c}`);
+  const s = (plain, twist) => {
+    ex.merges = [];
+    for (let i = 0; i < plain; i++) ex.merges.push({ twist: false, edge: i });
+    for (let i = 0; i < twist; i++) ex.merges.push({ twist: true, edge: plain + i });
+    return ex.surface();
+  };
+  eq(s(0, 0), { tubes: 0, twisted: 0, orientable: true, genus: 0, caps: 0, chi: 2 });
+  eq(s(2, 0), { tubes: 2, twisted: 0, orientable: true, genus: 2, caps: 0, chi: -2 });
+  eq(s(0, 1), { tubes: 1, twisted: 1, orientable: false, genus: 0, caps: 2, chi: 0 });
+  // a tube costs two from chi whichever way round it goes on
+  for (let n = 0; n <= 5; n++)
+    for (let t = 0; t <= n; t++)
+      eq(s(n - t, t).chi, 2 - 2 * n, `chi for ${n} tubes, ${t} twisted`);
+  // one twist anywhere is enough to make the whole world one-sided
+  eq(s(4, 1).orientable, false);
+  eq(s(4, 0).orientable, true);
+  // and the polygon agrees about which surface that is
+  for (const [plain, twist, name] of [[0,0,'a sphere'], [1,0,'a torus'], [3,0,'a surface of genus 3'],
+                                      [0,1,'a klein bottle'], [1,1,'a surface with 4 crosscaps'],
+                                      [0,2,'a surface with 4 crosscaps']]) {
+    const r = s(plain, twist);
+    const info = normalForm(r.genus, r.caps, 4).classify();
+    eq(info.name, name, `${plain} plain, ${twist} twisted`);
+    eq(info.chi, r.chi, `chi agrees for ${plain} plain, ${twist} twisted`);
+    eq(info.orientable, r.orientable, `orientability agrees for ${plain} plain, ${twist} twisted`);
   }
+});
+
+test('explore: the walk minus its closed loops is a spanning tree', () => {
+  for (const seed of ['tree-a', 'tree-b', 'tree-c']) {
+    const ex = new Explore(seed);
+    ex.supplies = 900;
+    walk(ex, 300, true);
+    const loops = ex.loopEdges();
+    const tree = ex.edges.filter(e => !loops.has(e.id));
+    eq(tree.length, ex.nodes.length - 1, `${seed}: a tree has one edge fewer than nodes`);
+    eq(loops.size, ex.merges.length, `${seed}: one loop edge per merge`);
+    eq(ex.edges.length, tree.length + loops.size, `${seed}: every edge is one or the other`);
+    // no cycle among the tree edges, and they reach every place
+    const parent = [...ex.nodes.keys()];
+    const find = a => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+    for (const e of tree) {
+      const x = find(e.a.node), y = find(e.b.node);
+      ok(x !== y, `${seed}: tree edge ${e.id} would close a cycle`);
+      parent[x] = y;
+    }
+    eq(new Set(ex.nodes.map(n => find(n.id))).size, 1, `${seed}: all one piece`);
+  }
+});
+
+test('explore: no loop can be closed after camp', () => {
+  const ex = new Explore('after-camp');
+  ex.supplies = 900;
+  walk(ex, 120, true);
+  ex.supplies = 10;
+  ok(ex.canCamp(), 'camp is offered');
+  ex.makeCamp();
+  const before = ex.surface();
+  eq(ex.askChance(), 0, 'the forest stops asking');
+  ex.supplies = 900;
+  walk(ex, 300, true);
+  eq(ex.surface(), before, 'so the shape cannot change');
+  eq(ex.loopEdges().size, before.tubes, 'and no new loop edges appeared');
 });
 
 test('explore: a world with no loose ends offers camp whatever the food says', () => {

@@ -48,7 +48,7 @@ button:hover .key, button:active .key { color: var(--paper); }
   grid-template-columns: minmax(0, 1fr) 380px; align-items: center; gap: 32px;
   padding: 32px; overflow: auto; }
 #stage { position: relative; display: grid; place-items: center; min-width: 0; }
-#pieces, #solid, #finalmap { display: block; margin: 0 auto; max-width: 100%;
+#worldmap, #solid { display: block; margin: 0 auto; max-width: 100%;
   grid-area: 1 / 1; }
 #solid { touch-action: none; cursor: grab; }
 #solid:active { cursor: grabbing; }

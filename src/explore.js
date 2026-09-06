@@ -29,7 +29,7 @@ export const PLACES = [
 export const START_SUPPLIES = 40;
 const CAMP_AT = 14;          // supplies left before camp is offered
 const MIN_MERGES_TO_CAMP = 1;
-const ASK_COOLDOWN = 7;      // steps between questions
+const ASK_COOLDOWN = 9;      // steps between questions
 const MIN_STEPS_TO_ASK = 10;
 const TWIST_CHANCE = 0.3;
 
@@ -138,8 +138,12 @@ export class Explore {
   }
 
   askChance() {
+    // After camp the shape of the world is settled, so nothing may close
+    // another loop. What is left can only grow as a tree, which is exactly
+    // what can be drawn flat on the sphere.
+    if (this.camped) return 0;
     if (this.sinceAsk < ASK_COOLDOWN || this.steps < MIN_STEPS_TO_ASK) return 0;
-    return Math.min(0.55, 0.16 + 0.05 * (this.sinceAsk - ASK_COOLDOWN));
+    return Math.min(0.45, 0.13 + 0.04 * (this.sinceAsk - ASK_COOLDOWN));
   }
 
   go(port) {
@@ -200,14 +204,10 @@ export class Explore {
       return;
     }
     const e = this.connect(p.from, p.fromPort, p.to, p.toPort, p.twist);
-    if (!this.camped) {
-      this.merges.push({ edge: e, twist: p.twist });
-      this.say(p.twist
-        ? 'yes. the same place, turned over. the path has come back on itself the wrong way round.'
-        : 'yes. the same place. the path has come back on itself.');
-    } else {
-      this.say('yes. the same place. you mark it on the map.');
-    }
+    this.merges.push({ edge: e, twist: p.twist });
+    this.say(p.twist
+      ? 'yes. the same place, turned over. the path has come back on itself the wrong way round.'
+      : 'yes. the same place. the path has come back on itself.');
     this.traverse(e, p.from, p.fromPort);
   }
 
@@ -266,18 +266,24 @@ export class Explore {
     return this.surface();
   }
 
-  // Handles from loops closed the same way round, crosscaps from the others.
-  // Beside a crosscap a handle is worth two more crosscaps, which is Dyck's
-  // theorem, so a world with any twist in it collapses to crosscaps alone.
+  // Every loop the player closed is a tube they walked through, and a tube
+  // glued onto a sphere is a handle. Glue it with a flip and it is a twisted
+  // handle, which is what turns a sphere into a klein bottle.
+  //
+  // A tube costs two from the euler characteristic whichever way it goes on,
+  // so chi is 2 - 2n however many are twisted. One twist anywhere makes the
+  // whole world non-orientable, and a non-orientable sphere with n tubes is
+  // 2n crosscaps. Nothing here can produce an odd euler characteristic, so
+  // the projective plane is not a world this forest can be.
   surface() {
-    let handles = 0, crosscaps = 0;
-    for (const m of this.merges) (m.twist ? crosscaps++ : handles++);
+    const tubes = this.merges.length;
+    const twisted = this.merges.filter(m => m.twist).length;
+    const orientable = twisted === 0;
     return {
-      handles, crosscaps,
-      orientable: crosscaps === 0,
-      genus: crosscaps === 0 ? handles : 0,
-      caps: crosscaps === 0 ? 0 : 2 * handles + crosscaps,
-      loops: this.merges.length,
+      tubes, twisted, orientable,
+      genus: orientable ? tubes : 0,
+      caps: orientable ? 0 : 2 * tubes,
+      chi: 2 - 2 * tubes,
     };
   }
 
@@ -289,6 +295,10 @@ export class Explore {
     this.pending = null;
     this.say(text);
   }
+
+  // Edge ids that closed a loop. Every other edge led to a place that did not
+  // exist a moment before, so the rest of the graph is a spanning tree.
+  loopEdges() { return new Set(this.merges.map(m => m.edge)); }
 
   stats() {
     const seen = this.nodes.filter(n => n.visited).length;

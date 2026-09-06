@@ -13,7 +13,10 @@ const RULE = '#cdc4b5';
 const TWIST = '#b5352c';
 const CAMP = '#c28a1b';
 
-export function layout(ex, iterations = 600) {
+// `skip` leaves some edges out of the springs, so a caller can lay out the
+// tree on its own and let the loops arch over the top of it.
+export function layout(ex, iterations = 600, opts = {}) {
+  const skip = opts.skip || new Set();
   const ids = ex.nodes.filter(n => n.visited).map(n => n.id);
   const index = new Map(ids.map((id, i) => [id, i]));
   const N = ids.length;
@@ -27,7 +30,7 @@ export function layout(ex, iterations = 600) {
   const links = [];
   for (const e of ex.edges) {
     const a = index.get(e.a.node), b = index.get(e.b.node);
-    if (a === undefined || b === undefined) continue;
+    if (a === undefined || b === undefined || skip.has(e.id)) continue;
     links.push([a, b, e.twist, e.id]);
   }
   const f = new Float64Array(N * 2);

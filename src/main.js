@@ -1,6 +1,6 @@
 import { Explore, START_SUPPLIES } from './explore.js';
 import { drawSketch } from './sketch.js';
-import { drawPieces } from './pieces.js';
+import { drawWorldMap } from './worldmap.js';
 import { normalForm } from './polygon.js';
 import { World } from './world.js';
 import { buildMesh } from './mesh.js';
@@ -11,20 +11,19 @@ import { randomSeedWord } from './rng.js';
 const $ = id => document.getElementById(id);
 const settings = { settleSteps: 3000, stepsPerFrame: 12, revealDelay: 900 };
 
-let ex, solid, relaxer, solidRAF = 0, view = 'pieces', mapOpen = false, revealed = false;
+let ex, solid, relaxer, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
 
 function start(seed) {
   const h = new URLSearchParams(location.hash.slice(1));
   const s = seed || h.get('seed') || randomSeedWord();
   location.hash = `seed=${s}`;
   if (solidRAF) cancelAnimationFrame(solidRAF);
-  solidRAF = 0; solid = null; relaxer = null; revealed = false; mapOpen = false; view = 'pieces';
+  solidRAF = 0; solid = null; relaxer = null; revealed = false; mapOpen = false; view = 'map';
   ex = new Explore(s);
   $('overlay').hidden = true;
   $('reveal').hidden = true;
   $('solid').hidden = true;
-  $('finalmap').hidden = true;
-  $('pieces').hidden = false;
+  $('worldmap').hidden = false;
   render();
 }
 
@@ -94,30 +93,27 @@ function button(text, key, onClick) {
 function reveal() {
   revealed = true;
   const s = ex.surface();
-  const kinds = ex.merges.map(m => (m.twist ? 'crosscap' : 'handle'));
   $('overlay').hidden = false;
   sizeStage();
-  drawPieces($('pieces'), kinds, stageSide(), stageSide());
-  const poly = normalForm(s.handles, s.crosscaps);
+  const poly = normalForm(s.genus, s.caps);
   const info = poly.classify();
   setTimeout(() => {
     $('reveal').hidden = false;
     describe(s, info);
-    setView('pieces');
+    setView('map');
     buildSolid(poly);
   }, settings.revealDelay);
 }
 
 function describe(s, info) {
   $('reveal-name').textContent = `you were walking on ${info.name}.`;
-  const pieces = s.loops === 0
-    ? 'you never closed a loop, so it never became anything but a sphere.'
-    : `${s.loops} loop${s.loops === 1 ? '' : 's'} closed: ` +
-      `${s.handles} the same way round, ${s.crosscaps} with the light on the wrong side.` +
-      (s.crosscaps && s.handles
-        ? ' beside a crosscap a handle is worth two more of them, so it all falls together into crosscaps.'
-        : '');
-  $('reveal-detail').textContent = pieces + ` euler characteristic ${info.chi}, ` +
+  const plain = s.tubes - s.twisted;
+  const body = s.tubes === 0
+    ? 'you never closed a loop, so the world stayed a sphere.'
+    : `a sphere with ${s.tubes} tube${s.tubes === 1 ? '' : 's'} through it: ` +
+      `${plain} glued straight on, ${s.twisted} with a half turn in ${s.twisted === 1 ? 'it' : 'them'}.` +
+      (s.twisted ? ' one half turn is enough to make the whole world one-sided.' : '');
+  $('reveal-detail').textContent = body + ` euler characteristic ${info.chi}, ` +
     `${info.orientable ? 'orientable' : 'not orientable'}.`;
   const st = ex.stats();
   $('reveal-stats').textContent =
@@ -136,20 +132,20 @@ function stageSide() {
 
 function sizeStage() {
   const side = stageSide();
-  drawPieces($('pieces'), ex.merges.map(m => (m.twist ? 'crosscap' : 'handle')), side, side);
-  drawSketch($('finalmap'), ex, side, side);
+  drawWorldMap($('worldmap'), ex, side, side);
   if (solid) { solid.resize(side, side); solid.draw(); }
 }
 
 function setView(v) {
   view = v;
-  for (const id of ['pieces', 'solid', 'finalmap']) $(id).hidden = id !== v;
+  $('worldmap').hidden = v !== 'map';
+  $('solid').hidden = v !== 'solid';
   for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
     b.setAttribute('aria-pressed', String(b.dataset.view === v));
-  $('stage-hint').textContent =
-    v === 'solid' ? 'drag to turn it over'
-    : v === 'pieces' ? 'a sphere with a hole per loop, and what each loop turned out to be'
-    : 'the paths you walked, as you drew them';
+  $('stage-hint').textContent = v === 'solid'
+    ? 'drag to turn it over'
+    : 'everywhere you walked lies flat on the sphere, except the loops you closed';
+  if (v === 'solid' && solid) solid.draw();
 }
 
 function buildSolid(poly) {
