@@ -1,5 +1,8 @@
 import { Polygon, DIRS, I2, mul, applyM, det, key, same, surfaceName, E, N, W, S } from '../src/polygon.js';
 import { Game } from '../src/game.js';
+import { World } from '../src/world.js';
+import { buildMesh } from '../src/mesh.js';
+import { mulberry32 } from '../src/rng.js';
 
 const results = [];
 function test(name, fn) {
@@ -181,6 +184,132 @@ test('game: refusing forbids that seam and finds another', () => {
   g.answer(false);
   ok(g.forbidden.size === before + 1, 'refusal recorded');
   ok(g.phase === 'prompt' || g.poly.pairCount() === 1, 'either asked again or sewn elsewhere');
+});
+
+test('sewRandom closes any polygon and only touches free edges', () => {
+  const rng = mulberry32(7);
+  for (const sides of [4, 8, 12, 16]) {
+    const p = new Polygon({ sides, len: 3 });
+    p.glue(0, 1, -1);
+    const before = JSON.stringify(p.pairs[0]);
+    p.sewRandom(rng);
+    ok(p.closed(), `sides ${sides} closed`);
+    eq(JSON.stringify(p.pairs[0]), before, 'existing pair untouched');
+    ok(!p.auto.has(0) && !p.auto.has(1), 'player pairs not marked auto');
+    eq(p.auto.size, sides - 2, 'the rest marked auto');
+    for (let i = 0; i < sides; i++) {
+      const q = p.pairs[i];
+      eq(p.pairs[q.j].j, i, `pairing symmetric at ${i}`);
+      eq(p.pairs[q.j].o, q.o, `orientation agrees at ${i}`);
+    }
+    const c = p.classify();
+    eq(c.closed, true); eq(c.boundaries, 0);
+  }
+});
+
+test('mesh: euler characteristic matches the polygon classification', () => {
+  const rng = mulberry32(11);
+  const cases = [];
+  // torus
+  let p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 4; i++) p.glue(i, 11 - i, -1);
+  for (let i = 0; i < 4; i++) p.glue(4 + i, 15 - i, -1);
+  cases.push(p);
+  // klein
+  p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 4; i++) p.glue(i, 8 + i, 1);
+  for (let i = 0; i < 4; i++) p.glue(4 + i, 15 - i, -1);
+  cases.push(p);
+  // sphere
+  p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 16; i += 2) p.glue(i, i + 1, -1);
+  cases.push(p);
+  // genus 4
+  p = new Polygon({ sides: 16, len: 6 });
+  for (let b = 0; b < 16; b += 4) { p.glue(b, b + 2, -1); p.glue(b + 1, b + 3, -1); }
+  cases.push(p);
+  // eight crosscaps
+  p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 16; i += 2) p.glue(i, i + 1, 1);
+  cases.push(p);
+  // and a dozen random ones
+  for (let t = 0; t < 12; t++) {
+    const q = new Polygon({ sides: 16, len: 6 });
+    q.sewRandom(rng);
+    cases.push(q);
+  }
+  for (const poly of cases) {
+    const world = new World('mesh-' + poly.pairs.map(x => x.j + ':' + x.o).join(), { sides: 16, len: 6 });
+    world.poly = poly;
+    const m = buildMesh(poly, world, new Set());
+    const info = poly.classify();
+    eq(m.chi, info.chi, `chi for ${info.name}`);
+    eq(m.F, poly.W * poly.H, 'one face per cell');
+    // every face slot is a valid vertex, and every edge is shared by two faces
+    eq(m.edgeA.length, m.F * 2, 'quad mesh has 2F edges when every edge is shared');
+    for (let i = 0; i < m.faces.length; i++) ok(m.faces[i] >= 0 && m.faces[i] < m.V, 'vertex in range');
+  }
+});
+
+test('mesh: the surface is connected and every vertex has a full ring', () => {
+  const p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 4; i++) p.glue(i, 11 - i, -1);
+  for (let i = 0; i < 4; i++) p.glue(4 + i, 15 - i, -1);
+  const world = new World('conn', { sides: 16, len: 6 });
+  world.poly = p;
+  const m = buildMesh(p, world, new Set());
+  eq(m.V, 24 * 24, 'flat torus has one vertex per cell');
+  const seenV = new Uint8Array(m.V);
+  const stack = [0]; seenV[0] = 1; let count = 1;
+  while (stack.length) {
+    const v = stack.pop();
+    for (let i = m.start[v]; i < m.start[v + 1]; i++) {
+      const w = m.adj[i];
+      if (!seenV[w]) { seenV[w] = 1; count++; stack.push(w); }
+    }
+  }
+  eq(count, m.V, 'connected');
+  for (let v = 0; v < m.V; v++) eq(m.deg[v], 4, `degree at ${v}`);
+});
+
+test('mesh: face winding agrees with the polygon orientability test', () => {
+  const rng = mulberry32(23);
+  const build = poly => {
+    const world = new World('or', { sides: 16, len: 6 });
+    world.poly = poly;
+    return buildMesh(poly, world, new Set());
+  };
+  // torus: orientable
+  let p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 4; i++) p.glue(i, 11 - i, -1);
+  for (let i = 0; i < 4; i++) p.glue(4 + i, 15 - i, -1);
+  eq(build(p).orientable, true, 'torus');
+  // klein: not
+  p = new Polygon({ sides: 16, len: 6 });
+  for (let i = 0; i < 4; i++) p.glue(i, 8 + i, 1);
+  for (let i = 0; i < 4; i++) p.glue(4 + i, 15 - i, -1);
+  eq(build(p).orientable, false, 'klein');
+  // and agreement on random worlds, where the two are computed by quite
+  // different routes: vertex classes on the polygon, face winding on the mesh
+  for (let t = 0; t < 20; t++) {
+    const q = new Polygon({ sides: 16, len: 6 });
+    q.sewRandom(rng);
+    const m = build(q);
+    eq(m.orientable, q.classify().orientable, `random world ${t}`);
+    if (m.orientable) {
+      // every shared edge is traversed once each way
+      const seen = new Map();
+      for (let f = 0; f < m.F; f++) {
+        for (let i = 0; i < 4; i++) {
+          let a = m.faces[f * 4 + i], b = m.faces[f * 4 + (i + 1) % 4];
+          if (m.orient[f] < 0) [a, b] = [b, a];
+          const k = a + ':' + b;
+          seen.set(k, (seen.get(k) || 0) + 1);
+        }
+      }
+      for (const [k, v] of seen) eq(v, 1, `directed edge ${k} used once`);
+    }
+  }
 });
 
 const el = document.getElementById('out');

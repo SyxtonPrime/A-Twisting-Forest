@@ -21,11 +21,44 @@ instead:
 Say yes and the two edges are sewn, with whatever twist that landing implied.
 Say no and that seam is ruled out and the game finds another.
 
-When your supplies run out (or you lie down), the view zooms out from your
-map to the polygon itself: every seam drawn as a coloured, arrowed pair of
-edges in the style of a fundamental polygon, unsewn edges dashed, and corners
-where the squares don't add up to four marked as cone points. Then it names
-the surface you were walking on.
+When your supplies run out (or you lie down), any rim you never walked off is
+sewn at random, so the world you leave behind is always closed. Then the view
+zooms out from your map to the polygon itself: every seam drawn as a coloured,
+arrowed pair of edges in the style of a fundamental polygon, the ones the
+forest sewed for itself dashed, and corners where the squares don't add up to
+four marked as cone points.
+
+Then the polygon folds up. The surface is built as an actual mesh, with the
+rim corners identified according to your gluing, and settles into three
+dimensions in front of you. Drag to turn it over. A button flips back to the
+flat map.
+
+## The solid
+
+There is no cheating here: the shape is your world's own mesh, carrying your
+terrain, and its holes are real holes. But it is a picture of the topology,
+not of the metric, and the difference is the interesting part.
+
+These worlds are flat everywhere except at the polygon's corners, so a
+faithful embedding would look like crumpled paper, and for most of them no
+faithful embedding exists at all. A flat torus does not fit in three
+dimensions; nothing non-orientable fits without passing through itself. So the
+mesh is relaxed rather than solved: edge springs holding the grid spacing,
+a long-range repulsion that opens the holes, hard short-range repulsion so the
+sheet cannot pass through itself where it doesn't have to, a little surface
+tension, and just enough pressure to lift a flat sheet off the plane. That
+last one matters more than it sounds: a flat grid is already at rest under
+everything else, so without a breath of pressure a sphere stays a folded
+envelope forever. Too much and it blows the holes shut, which is worse.
+
+A world whose curvature is spread out comes out round. One that piles all of
+it into a few corners comes out spiky, because that is honestly what it is.
+
+Non-orientable worlds cannot be wound consistently, so the pressure fights
+itself along one seam and the surface passes through itself. That is not a
+bug; it is the only way such a world can sit in space at all. The renderer is
+a small z-buffered rasteriser written for this reason, since painter's
+algorithm tears along exactly those self-intersection curves.
 
 ## Why a polygon
 
@@ -55,6 +88,12 @@ it.
 - `src/game.js` — player state (true cell, heading frame, dead reckoning),
   the offer/refuse logic at unsewn edges, supplies, and `develop()`, which lays
   the world out flat around the player for drawing.
+- `src/mesh.js` — the quotient mesh: rim corners identified, faces, adjacency,
+  and a breadth-first winding pass that decides orientability independently of
+  the polygon's own answer. The tests check the two agree.
+- `src/embed.js` — spectral starting layout and the relaxation described above.
+- `src/scene3d.js` — the z-buffered rasteriser, flat shading, seam curves
+  traced on the solid, and orbit controls.
 - `src/render.js` — the map, the polygon diagram, and the zoom-out.
 - `src/main.js` — DOM wiring. Options via the URL hash:
   `#seed=word&sides=16&len=6` (sides must be a multiple of four).
@@ -86,3 +125,8 @@ drives headless Chrome:
 ```
 
 or open `tests/index.html` from the served directory.
+
+`lab.html` renders a grid of known surfaces (torus, sphere, Klein bottle,
+genus 4, projective plane) from several angles, for tuning the relaxation.
+Its constants are URL parameters: `?steps=3000&ks=1&kr=1&kl=0.35&kp=0.25&kc=6`.
+Nothing links to it; it is a workbench.

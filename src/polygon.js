@@ -38,6 +38,7 @@ export class Polygon {
     for (let y = this.H - 1; y >= 0; y--) this.boundary.push({ cell: [0, y], side: W });
     this.index = new Map(this.boundary.map((b, i) => [key(b.cell) + ':' + b.side, i]));
     this.pairs = new Array(this.n).fill(null); // { j, o } with o = +1 same way round, -1 opposite
+    this.auto = new Set();                    // edges the world sewed for itself
   }
 
   inside([x, y]) { return x >= 0 && y >= 0 && x < this.W && y < this.H; }
@@ -53,6 +54,25 @@ export class Polygon {
     if (i === j || !this.isFree(i) || !this.isFree(j)) throw new Error('bad gluing');
     this.pairs[i] = { j, o };
     this.pairs[j] = { j: i, o };
+  }
+
+  // Sew whatever is still loose, at random. Any pairing of a polygon's edges
+  // gives a closed surface, so this always terminates in one.
+  sewRandom(rng) {
+    const free = this.freeEdges();
+    for (let i = free.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [free[i], free[j]] = [free[j], free[i]];
+    }
+    const sewn = [];
+    while (free.length >= 2) {
+      const a = free.pop(), b = free.pop();
+      const o = rng() < 0.5 ? 1 : -1;
+      this.glue(a, b, o);
+      this.auto.add(a); this.auto.add(b);
+      sewn.push([a, b, o]);
+    }
+    return sewn;
   }
 
   // Land across unit edge idx if its polygon edge were paired with j (way o).

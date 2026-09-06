@@ -1,0 +1,76 @@
+<!doctype html><meta charset="utf-8"><title>lab</title>
+<style>
+body { margin:0; background:#f4efe6; font:11px monospace; color:#1e1a16; padding:6px; }
+.row { display:flex; align-items:center; gap:4px; margin-bottom:4px; }
+.lbl { width:150px; }
+canvas { border:1px solid #d9d0c1; }
+</style>
+<div id="grid"></div>
+<script type="module">
+import { Polygon } from './src/polygon.js';
+import { World } from './src/world.js';
+import { buildMesh } from './src/mesh.js';
+import { spectralInit, Relaxer } from './src/embed.js';
+import { Solid } from './src/scene3d.js';
+
+const OPTS = { sides: 16, len: 6 };
+const P = new URLSearchParams(location.search);
+const STEPS = Number(P.get('steps') || 2500);
+const KR = Number(P.get('kr') === null ? 1.0 : P.get('kr'));
+const JIT = Number(P.get('jit') || 0);
+const KL = Number(P.get('kl') === null ? 0.35 : P.get('kl'));
+const KS = Number(P.get('ks') === null ? 1 : P.get('ks'));
+const KP = Number(P.get('kp') === null ? 0.25 : P.get('kp'));
+const KC = Number(P.get('kc') === null ? 6 : P.get('kc'));
+const ONLY = P.get('only');
+
+function mk(fn) { const p = new Polygon(OPTS); fn(p); return p; }
+const cases = {
+  torus: () => mk(p => { for (let i=0;i<4;i++) p.glue(i, 11-i, -1); for (let i=0;i<4;i++) p.glue(4+i, 15-i, -1); }),
+  sphere: () => mk(p => { for (let i=0;i<16;i+=2) p.glue(i, i+1, -1); }),
+  klein: () => mk(p => { for (let i=0;i<4;i++) p.glue(i, 8+i, 1); for (let i=0;i<4;i++) p.glue(4+i, 15-i, -1); }),
+  genus4: () => mk(p => { for (let b=0;b<16;b+=4) { p.glue(b, b+2, -1); p.glue(b+1, b+3, -1); } }),
+  proj: () => mk(p => { for (let i=0;i<8;i++) p.glue(i, i+8, 1); }),
+};
+const grid = document.getElementById('grid');
+const log = [];
+for (const [name, make] of Object.entries(cases)) {
+  if (ONLY && ONLY !== name) continue;
+  const poly = make();
+  const world = new World('lab-' + name, OPTS);
+  world.poly = poly;
+  const all = new Set();
+  for (let y=0;y<poly.H;y++) for (let x=0;x<poly.W;x++) all.add(`${x},${y}`);
+  const mesh = buildMesh(poly, world, all);
+  const pos = spectralInit(mesh, 3, 900);
+  if (JIT) for (let i=0;i<pos.length;i++) pos[i] += (Math.random()-0.5)*JIT;
+  const rel = new Relaxer(mesh, pos, { kr: KR, kl: KL, ks: KS, kp: KP, kc: KC });
+  const t0 = performance.now();
+  for (let i = 0; i < STEPS; i++) rel.step();
+  rel.recentre();
+  const ms = performance.now() - t0;
+  // mean edge length, to see how much the springs got stretched
+  let sum = 0;
+  for (let e=0;e<mesh.edgeA.length;e++){const a=mesh.edgeA[e],b=mesh.edgeB[e];
+    sum += Math.hypot(pos[a*3]-pos[b*3], pos[a*3+1]-pos[b*3+1], pos[a*3+2]-pos[b*3+2]);}
+  const meanE = sum / mesh.edgeA.length;
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl';
+  lbl.textContent = `${name} chi=${poly.classify().chi}`;
+  row.appendChild(lbl);
+  for (const [az, el] of [[0,0.3],[1.05,0.3],[2.1,0.3],[0.6,1.35]]) {
+    const cv = document.createElement('canvas');
+    row.appendChild(cv);
+    const s = new Solid(cv, mesh, rel.pos);
+    s.setPairColours(poly);
+    s.az = az; s.el = el;
+    s.resize(190, 190, 1);
+    s.draw();
+  }
+  grid.appendChild(row);
+  log.push(`${name} r=${rel.radius().toFixed(1)} e=${meanE.toFixed(2)} ${ms.toFixed(0)}ms`);
+}
+document.title = 'LAB ' + log.join(' | ');
+</script>

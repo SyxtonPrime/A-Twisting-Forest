@@ -47,13 +47,18 @@
   <section id="log" aria-live="polite"></section>
 </main>
 <div id="overlay" hidden>
-  <canvas id="zoom"></canvas>
+  <div id="stage">
+    <canvas id="zoom"></canvas>
+    <canvas id="solid" hidden></canvas>
+    <p id="stage-hint" hidden>drag to turn it over</p>
+  </div>
   <section id="reveal" hidden>
     <h1>the world</h1>
     <p id="reveal-name"></p>
     <p id="reveal-detail"></p>
     <p id="reveal-stats"></p>
     <div class="buttons">
+      <button id="flip">show the flat map</button>
       <button id="again">begin again</button>
       <button id="same">same world</button>
     </div>

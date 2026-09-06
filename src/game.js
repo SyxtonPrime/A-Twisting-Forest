@@ -21,6 +21,7 @@ export class Game {
     this.steps = 0;
     this.agreed = 0;
     this.refused = 0;
+    this.autoSewn = 0;
     this.phase = 'explore'; // explore | prompt | over
     this.pending = null;
     this.log = [];
@@ -140,7 +141,20 @@ export class Game {
     this.end('you lie down.');
   }
 
-  end(text) { this.phase = 'over'; this.say(text); }
+  // Nothing is left hanging. Whatever rim the player never walked off gets
+  // sewn at random, so the world they leave behind is always closed.
+  end(text) {
+    if (this.phase === 'over') return;
+    this.phase = 'over';
+    this.say(text);
+    const rest = this.poly.sewRandom(this.rng);
+    this.autoSewn = rest.length;
+    if (rest.length) {
+      this.say(rest.length === 1
+        ? 'behind you, the last way out closes.'
+        : `behind you, the last ${rest.length} ways out close.`);
+    }
+  }
 
   // Lay the world out flat around the player, as their dead reckoning would
   // have it: breadth-first through the sewn edges, first arrival wins. Away

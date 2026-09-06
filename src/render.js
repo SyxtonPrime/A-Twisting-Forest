@@ -87,7 +87,8 @@ export function drawPolygon(canvas, game, cs, info) {
     const [, e1] = poly.unitSegment((i + 1) * poly.k - 1);
     const a = px(s0), b = px(e1);
     ctx.strokeStyle = style ? style.colour : '#cdc4b5';
-    ctx.setLineDash(style ? [] : [cs / 3, cs / 3]);
+    // dashed for a seam the world sewed itself, solid for one the player chose
+    ctx.setLineDash(style && !poly.auto.has(i) ? [] : [cs / 3, cs / 3]);
     ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
     ctx.setLineDash([]);
     if (!style) continue;

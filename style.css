@@ -72,7 +72,12 @@ button:hover .key, button:active .key { color: var(--paper); }
   grid-template-columns: minmax(0, 1fr) 360px; align-items: center; gap: 24px;
   padding: 24px; overflow: auto;
 }
-#zoom { display: block; margin: 0 auto; max-width: 100%; }
+#stage { position: relative; display: grid; place-items: center; min-width: 0; }
+#zoom, #solid { display: block; margin: 0 auto; max-width: 100%; grid-area: 1 / 1;
+  transition: opacity .9s ease; }
+#solid { touch-action: none; cursor: grab; }
+#solid:active { cursor: grabbing; }
+#stage-hint { grid-area: 2 / 1; margin: 8px 0 0; color: var(--faint); text-align: center; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 #reveal { animation: fade-in .9s ease both; }
 @media (prefers-reduced-motion: reduce) { #reveal { animation-duration: .01s; } }

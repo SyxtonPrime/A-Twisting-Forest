@@ -1,6 +1,9 @@
 import { Game } from './game.js';
 import { drawChart, polygonZoom } from './render.js';
 import { randomSeedWord } from './rng.js';
+import { buildMesh } from './mesh.js';
+import { spectralInit, Relaxer } from './embed.js';
+import { Solid } from './scene3d.js';
 
 const $ = id => document.getElementById(id);
 const oddDown = x => (x % 2 ? x : x - 1);
@@ -29,15 +32,21 @@ function layout() {
 }
 
 let game, p, view, zooming = false;
-const settings = { zoomMs: 2600 };
+let solid = null, relaxer = null, solidRAF = 0, showingSolid = false;
+const settings = { zoomMs: 2600, settleSteps: 3000, stepsPerFrame: 12 };
 
 function start(seed) {
   p = params();
   if (seed) p.seed = seed;
   location.hash = `seed=${p.seed}&sides=${p.sides}&len=${p.len}`;
   game = new Game(p.seed, { sides: p.sides, len: p.len });
+  if (solidRAF) cancelAnimationFrame(solidRAF);
+  solidRAF = 0; solid = null; relaxer = null; showingSolid = false;
   $('overlay').hidden = true;
   $('reveal').hidden = true;
+  $('solid').hidden = true;
+  $('stage-hint').hidden = true;
+  $('zoom').style.opacity = 1;
   zooming = false;
   render();
 }
@@ -89,24 +98,66 @@ function reveal() {
 
 function showReveal(info) {
   $('reveal').hidden = false;
+  setTimeout(() => buildSolid(), 700);
   const half = game.poly.n / 2;
-  if (info.closed) {
-    $('reveal-name').textContent = `you were walking on ${info.name}.`;
-    $('reveal-detail').textContent =
-      `${half} pairs of edges, ${info.V} corner${info.V === 1 ? '' : 's'}. euler characteristic ${info.chi}, ` +
-      `${info.orientable ? 'orientable' : 'not orientable'}. ` +
-      (info.cones.length
-        ? `${info.bunched} corner${info.bunched === 1 ? '' : 's'} where the world bunches up, ${info.flared} where it flares out.`
-        : 'flat everywhere: your map never lied.');
-  } else {
-    $('reveal-name').textContent = `you never closed the world.`;
-    $('reveal-detail').textContent =
-      `${info.pairs} of ${half} pairs sewn, ${info.boundaries} ragged edge${info.boundaries === 1 ? '' : 's'} left. ` +
-      `sewn shut as it stands it would be ${info.name}.`;
-  }
+  const yours = half - game.autoSewn;
+  $('reveal-name').textContent = `you were walking on ${info.name}.`;
+  $('reveal-detail').textContent =
+    `${yours} of ${half} seams were yours; the forest closed the rest. ` +
+    `euler characteristic ${info.chi}, ${info.orientable ? 'orientable' : 'not orientable'}, ` +
+    `${info.V} corner${info.V === 1 ? '' : 's'}. ` +
+    (info.cones.length
+      ? `${info.bunched} where the world bunches up, ${info.flared} where it flares out.`
+      : 'flat everywhere: your map never lied.');
   $('reveal-stats').textContent =
     `${game.steps} steps. ${game.explored.size} of ${game.poly.W * game.poly.H} places seen. ` +
     `you recognised ${game.agreed} place${game.agreed === 1 ? '' : 's'} and refused ${game.refused}.`;
+}
+
+// Build the surface as a solid and let it settle where the player can watch.
+function buildSolid() {
+  const mesh = buildMesh(game.poly, game.world, game.explored);
+  const pos = spectralInit(mesh, 3, 900);
+  for (let i = 0; i < pos.length; i++) pos[i] += (Math.random() - 0.5) * 0.15;  // break the symmetry
+  relaxer = new Relaxer(mesh, pos);
+  solid = new Solid($('solid'), mesh, relaxer.pos);
+  solid.setPairColours(game.poly);
+  sizeSolid();
+  $('solid').hidden = false;
+  requestAnimationFrame(() => {
+    $('zoom').style.opacity = 0;
+    $('stage-hint').hidden = false;
+  });
+  showingSolid = true;
+  $('flip').textContent = 'show the flat map';
+  // Settle it in front of the player rather than making them wait. The step
+  // budget adapts, so a slow phone takes longer to come to rest instead of
+  // dropping frames.
+  let budget = settings.stepsPerFrame;
+  const spin = () => {
+    solidRAF = requestAnimationFrame(spin);
+    if (relaxer.steps < settings.settleSteps) {
+      const t0 = performance.now();
+      for (let i = 0; i < budget; i++) relaxer.step();
+      relaxer.recentre();
+      const per = (performance.now() - t0) / budget;
+      budget = Math.max(1, Math.min(40, Math.round(9 / Math.max(per, 0.05))));
+    }
+    if (solid.autoSpin) solid.az += 0.004;
+    solid.draw();
+  };
+  spin();
+}
+
+function sizeSolid() {
+  if (!solid) return;
+  const overlay = $('overlay');
+  const narrow = window.innerWidth <= 900;
+  const w = narrow ? overlay.clientWidth - 32 : Math.max(320, overlay.clientWidth - 360 - 72);
+  const h = narrow ? Math.max(260, overlay.clientHeight * 0.55) : Math.max(320, overlay.clientHeight - 48);
+  const side = Math.max(240, Math.min(w, h));
+  solid.resize(side, side);
+  solid.draw();
 }
 
 const KEYS = {
@@ -143,14 +194,25 @@ $('yes').onclick = () => { game.answer(true); render(); };
 $('no').onclick = () => { game.answer(false); render(); };
 $('lie-down').onclick = () => { game.giveUp(); render(); };
 $('new-world').onclick = () => start(randomSeedWord());
+$('flip').onclick = () => {
+  if (!solid) return;
+  showingSolid = !showingSolid;
+  $('zoom').style.opacity = showingSolid ? 0 : 1;
+  $('solid').style.opacity = showingSolid ? 1 : 0;
+  $('stage-hint').hidden = !showingSolid;
+  $('flip').textContent = showingSolid ? 'show the flat map' : 'show the world';
+};
 $('again').onclick = () => start(randomSeedWord());
 $('same').onclick = () => start(game.seed);
 
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { if (game && game.phase !== 'over') render(); }, 150);
+  resizeTimer = setTimeout(() => {
+    if (game && game.phase !== 'over') render();
+    else sizeSolid();
+  }, 150);
 });
 
 start();
-window.dev = { game: () => game, render, settings };
+window.dev = { game: () => game, render, settings, solid: () => solid, relaxer: () => relaxer };
