@@ -21,9 +21,9 @@ export const PLACES = [
   { key: 'cairn',    name: 'a heap of stones',    the: 'that heap of stones', weight: 9, supplies: 0 },
   { key: 'skull',    name: 'a deer skull',        the: 'that deer skull',    weight: 7,  supplies: 0 },
   { key: 'bramble',  name: 'a wall of bramble',   the: 'that bramble',       weight: 7,  supplies: 0 },
-  { key: 'pool',     name: 'a still pool',        the: 'that still pool',    weight: 6,  supplies: 4 },
-  { key: 'creek',    name: 'a dry creek',         the: 'that dry creek',     weight: 5,  supplies: 2 },
-  { key: 'hut',      name: 'a fallen hut',        the: 'that fallen hut',    weight: 4,  supplies: 9 },
+  { key: 'pool',     name: 'a still pool',        the: 'that still pool',    weight: 6,  supplies: 4, take: 'you drink your fill.' },
+  { key: 'creek',    name: 'a dry creek',         the: 'that dry creek',     weight: 5,  supplies: 2, take: 'there is water under the stones.' },
+  { key: 'hut',      name: 'a fallen hut',        the: 'that fallen hut',    weight: 4,  supplies: 9, take: 'there is food in the hut, still good.' },
 ];
 
 export const START_SUPPLIES = 40;
@@ -65,7 +65,7 @@ export class Explore {
     this.trail = [start.id];
 
     this.say('the fire is out. the forest is dark.');
-    this.say(`you have food for ${START_SUPPLIES} more hours of walking.`);
+    this.say(`you have food for ${START_SUPPLIES} hours of walking.`);
     this.say('there is a path. you cannot see where it goes.');
   }
 
@@ -90,6 +90,7 @@ export class Explore {
       name: place.name,
       the: place.the,
       supplies: place.supplies,
+      take: place.take,
       looted: false,
       ports: new Array(degree).fill(null),
       visited: false,
@@ -232,7 +233,9 @@ export class Explore {
     if (n.supplies && !n.looted) {
       n.looted = true;
       this.supplies += n.supplies;
-      this.say(`food for ${n.supplies} more hours.`);
+      // Say what was gained, never a bare "food for N hours": that reads as
+      // the total and makes it look as though the supply just collapsed.
+      this.say(`${n.take} ${n.supplies} hours further than you could go before.`);
     }
     if (fresh && this.here.degree > 2 && this.ways().length > 1) this.say('the path splits.');
     if (this.looseEnds() === 0 && !this.toldClosed) {

@@ -72,27 +72,27 @@ between a handle and a Klein bottle.
 
 So it is not a diagram beside the map. It is the map.
 
-**The solid.** The same surface as something you can drag, built as a real
-quad mesh from the normal-form polygon and relaxed into three dimensions.
+**The solid.** The same surface as something you can drag, and it is built
+rather than found. A capsule stands for the sphere, one pair of holes is cut
+for each loop you closed, and a tube is stitched between each pair. Stitch the
+far end the same way round and it is an ordinary handle; stitch it reversed
+and it is a twisted handle, which is what makes a sphere into a Klein bottle.
 
-It is a picture of the topology, not of the metric, and it cannot be
-otherwise. These surfaces are flat everywhere except at the polygon's corners,
-so a faithful embedding would look like crumpled paper, and for most of them
-none exists: a flat torus does not fit in three dimensions, and nothing
-non-orientable fits without passing through itself. So the mesh is relaxed
-rather than solved, with edge springs, a long-range repulsion that opens the
-holes, a hard short-range one so the sheet cannot pass through itself where it
-needn't, surface tension, and a breath of pressure.
+That reversal is the whole of the topology, and it is not approximated. The
+tests check the Euler characteristic and the orientability of the built mesh
+against what the normal-form polygon says, by a completely separate route.
 
-That last one earns its place: a flat grid is already at rest under everything
-else, so with no pressure a sphere stays a folded envelope forever, and with
-too much of it the holes blow shut and a torus becomes a ball.
+A twisted tube cannot close up in space without passing through something, so
+it is routed the way the classic picture routes it: over the top, round, and
+back up into its hole from inside the capsule. You can watch it go through the
+wall.
 
-Non-orientable worlds cannot be wound consistently, so the pressure fights
-itself along one seam and the surface passes through itself. That is not a
-bug; it is the only way such a world can sit in space. The renderer is a small
-z-buffered rasteriser written for exactly that reason, since painter's
-algorithm tears along those self-intersection curves.
+An earlier version meshed the normal-form polygon and let a physical
+relaxation find a shape, with springs, repulsion, surface tension and
+pressure. It was honest and it looked like crumpled paper, because these
+surfaces are flat everywhere except at their cone points and nothing in that
+energy says "look like a pretzel". Building the classic picture directly is
+both prettier and more exact, so the relaxation is gone.
 
 ## Layout
 
@@ -104,11 +104,15 @@ algorithm tears along those self-intersection curves.
   the sphere, with the closed loops arching over as tubes.
 - `src/polygon.js` — a polygon with its edges paired, its normal forms, and
   the classification: Euler characteristic, orientability, cone points.
-- `src/mesh.js` — the quotient mesh, and a face-winding pass that decides
-  orientability by a route independent of the polygon's own answer.
-- `src/embed.js` — spectral starting layout and the relaxation above.
+- `src/handlebody.js` — the solid: a capsule, a pair of holes per loop, and a
+  stitched tube between each pair.
+- `src/mesh.js` — the quotient mesh of a polygon, and the face-winding pass
+  that decides orientability. The winding pass is what `handlebody.js` uses to
+  check itself; the quotient mesh is now only used by the tests, where it is a
+  second opinion on what `normalForm` builds.
 - `src/scene3d.js` — the rasteriser and orbit controls.
-- `src/world.js`, `src/rng.js` — terrain for the solid, and seeded randomness.
+- `src/polygon.js`, `src/world.js`, `src/rng.js` — the polygon that names the
+  surface, terrain used only by the tests, and seeded randomness.
 - `src/main.js` — DOM wiring. The seed lives in the URL hash: `#seed=word`.
 
 ### One sharp edge

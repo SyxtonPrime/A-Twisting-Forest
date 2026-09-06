@@ -33,13 +33,18 @@ export class Solid {
     this.w = this.h = 0;
     this.bindPointer();
 
-    // Face colours, fixed once: terrain, paled where the player never went.
-    this.faceRGB = new Uint8Array(mesh.F * 3);
-    for (let f = 0; f < mesh.F; f++) {
-      const base = COLOUR[NAMES[mesh.terrain[f]]] || COLOUR.grass;
-      const t = mesh.seen[f] ? 0 : 0.72;   // unvisited fades toward paper
-      for (let c = 0; c < 3; c++)
-        this.faceRGB[f * 3 + c] = Math.round(base[c] * (1 - t) + PAPER_RGB[c] * t);
+    // A mesh may bring its own colours; otherwise colour by terrain, paled
+    // where the player never went.
+    if (mesh.rgb) {
+      this.faceRGB = mesh.rgb;
+    } else {
+      this.faceRGB = new Uint8Array(mesh.F * 3);
+      for (let f = 0; f < mesh.F; f++) {
+        const base = COLOUR[NAMES[mesh.terrain[f]]] || COLOUR.grass;
+        const t = mesh.seen[f] ? 0 : 0.72;
+        for (let c = 0; c < 3; c++)
+          this.faceRGB[f * 3 + c] = Math.round(base[c] * (1 - t) + PAPER_RGB[c] * t);
+      }
     }
     this.seamRGB = SEAM.map(hexRGB);
     this.pairColour = new Map();
