@@ -170,6 +170,20 @@ export function boundaryLoop(h) {
 // that starts on the lower lip of the slit and ends on the upper one. Those
 // two ends become the same point when it is rolled up, which is when the arc
 // closes into a circle.
+// The same walk as rimArc, but as grid coordinates, so a route can be laid
+// out to meet the rim at a chosen point.
+export function rimUV(h, which = 0) {
+  const hole = h.holes[which];
+  if (!hole) return [];
+  const { u0, v0 } = hole, { hu, hv } = h;
+  const arc = [[u0, v0]];
+  for (let u = u0 + 1; u <= u0 + hu; u++) arc.push([u, v0]);
+  for (let v = v0 + 1; v <= v0 + hv; v++) arc.push([u0 + hu, v]);
+  for (let u = u0 + hu - 1; u >= u0; u--) arc.push([u, v0 + hv]);
+  for (let v = v0 + hv - 1; v >= v0; v--) arc.push([u0, v]);
+  return arc;
+}
+
 export function rimArc(h, which = 0) {
   const hole = h.holes[which];
   if (!hole) return [];

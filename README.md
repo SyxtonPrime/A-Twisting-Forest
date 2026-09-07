@@ -102,10 +102,25 @@ up gets there as well, and that is what it used to do. It goes through shapes
 that are not surfaces on the way, and there is nothing to follow.
 
 **The grid and the walk.** A grid over the net, the places worth marking, and
-the route between them joined along it. All of it is given as vertex indices
-rather than as points, so it rides the surface as it rolls up without being
-worked out again. Only a handful of waypoints per piece: joining thirty of them
-fills the whole thing with dashes and stops reading as a route.
+the route between them. All of it is given as vertex indices rather than as
+points, so it rides the surface as it rolls up without being worked out again.
+
+The route runs the whole way, across the cylinders as well as the pieces. Each
+piece is crossed along a corridor, a row of the grid that misses every hole;
+the route comes in at the rim it entered by, runs along the corridor past the
+waypoints, and leaves by the rim on the far side. The cylinder is crossed
+straight across, at index `k` of the near rim and `m − 1 − k` of the far one,
+since the far rim runs the other way round so the two agree about which side is
+out. Read the wrong one and the route steps off into space exactly where the
+pieces meet.
+
+Getting from one place to the next is a breadth-first search across the grid,
+not a ruled line. A ruled line crosses whatever holes are in the way, and
+dropping the vertices that were not there leaves the route jumping the gap,
+which is not a route. A search cannot do that, because it only ever steps to a
+square that exists. There is a test that every step of the route joins two
+vertices that share a face, that the whole thing is one connected line, and
+that it really does cross each cylinder.
 
 ## Where this is going
 

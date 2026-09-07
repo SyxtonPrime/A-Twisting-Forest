@@ -3,7 +3,7 @@ import { Explore } from '../src/explore.js';
 import { World } from '../src/world.js';
 import { buildMesh } from '../src/mesh.js';
 import { buildHandle, handleGluings, boundaryLoop } from '../src/handle.js';
-import { buildChain, chainGluings } from '../src/chain.js';
+import { buildChain, chainGluings, chainOverlay, chainPositions } from '../src/chain.js';
 import { mulberry32 } from '../src/rng.js';
 
 const results = [];
@@ -769,6 +769,63 @@ test('chain: the net lies flat, and rolling it up moves every point somewhere', 
                          c.positions[a * 3 + 1] - c.positions[b * 3 + 1],
                          c.positions[a * 3 + 2] - c.positions[b * 3 + 2]);
     ok(d < 1e-3, `glued pair ${a},${b} is ${d.toFixed(4)} apart when rolled up`);
+  }
+});
+
+test('chain: the route runs the whole way, across the cylinders as well', () => {
+  for (const twists of [[false], [false, false], [false, true, false]]) {
+    const plan = twists.map(t => ({ twisted: t }));
+    const chain = buildChain(plan);
+    const ex = new Explore('route-' + twists.length);
+    ex.supplies = 900;
+    walk(ex, 220, true);
+    const paths = chainOverlay(chain, ex);
+    const trail = paths.filter(p => p.kind === 'trail');
+    ok(trail.length > 0, `${twists.length} pieces: there is a route at all`);
+
+    // every step of it joins two vertices that share a face, and the whole
+    // thing is one piece rather than scraps
+    const share = new Map();
+    for (let f = 0; f < chain.F; f++) {
+      for (let i = 0; i < 4; i++) {
+        const a = chain.faces[f * 4 + i], b = chain.faces[f * 4 + (i + 1) % 4];
+        if (a === b) continue;
+        if (!share.has(a)) share.set(a, new Set());
+        if (!share.has(b)) share.set(b, new Set());
+        share.get(a).add(b); share.get(b).add(a);
+      }
+    }
+    const link = new Map();
+    const join = (a, b) => {
+      if (!link.has(a)) link.set(a, new Set());
+      if (!link.has(b)) link.set(b, new Set());
+      link.get(a).add(b); link.get(b).add(a);
+    };
+    for (const p of trail) {
+      for (let i = 0; i + 1 < p.ids.length; i++) {
+        const a = p.ids[i], b = p.ids[i + 1];
+        ok(a === b || (share.get(a) && share.get(a).has(b)),
+          `${twists.length} pieces: the route jumps between ${a} and ${b}, which do not touch`);
+        join(a, b);
+      }
+    }
+    const all = [...link.keys()];
+    const seen = new Set([all[0]]);
+    const stack = [all[0]];
+    while (stack.length) {
+      const v = stack.pop();
+      for (const w of link.get(v)) if (!seen.has(w)) { seen.add(w); stack.push(w); }
+    }
+    eq(seen.size, all.length, `${twists.length} pieces: the route is one connected line`);
+
+    // and it really does use the cylinders, not just the pieces either side
+    if (chain.bridges.length) {
+      const inTrail = new Set(all);
+      for (const br of chain.bridges) {
+        const mid = br.cols[Math.floor(br.cols.length / 2)];
+        ok(mid.some(v => inTrail.has(v)), 'the route crosses the cylinder');
+      }
+    }
   }
 });
 

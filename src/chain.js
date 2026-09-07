@@ -13,7 +13,7 @@
 // a convex boundary it always comes out a proper drawing, with no overlaps to
 // check for afterwards.
 
-import { buildHandle, handleGluings, boundaryLoop, rimArc } from './handle.js';
+import { buildHandle, handleGluings, boundaryLoop, rimArc, rimUV } from './handle.js';
 
 const CELL = 0.22;
 
@@ -67,8 +67,9 @@ export function buildChain(plan, opts = {}) {
   for (let i = 0; i + 1 < n; i++) {
     const left = units[i], right = units[i + 1];
     // the rim on the right of this piece, and the one on the left of the next
-    const a = rimArc(left, left.rims === 2 ? 1 : 0).map(v => g(i, v));
-    const b = rimArc(right, 0).map(v => g(i + 1, v));
+    const leftHole = left.rims === 2 ? 1 : 0, rightHole = 0;
+    const a = rimArc(left, leftHole).map(v => g(i, v));
+    const b = rimArc(right, rightHole).map(v => g(i + 1, v));
     const m = a.length;
     // a ruled tube from one rim to the other; the far rim runs the other way
     // round so the two agree about which side is out
@@ -88,7 +89,7 @@ export function buildChain(plan, opts = {}) {
         faces.push([cols[s][k], cols[s][k + 1], cols[s + 1][k + 1], cols[s + 1][k]]);
       }
     }
-    bridges.push({ cols, m });
+    bridges.push({ cols, m, left: i, right: i + 1, leftHole, rightHole });
   }
 
   // ---- flat: each handle pinned to a polygon, each cylinder a rectangle --
@@ -353,61 +354,145 @@ export function chainOverlay(chain, ex, opts = {}) {
     for (let u = 0; u <= h.nu; u += stepU) {
       const line = [];
       for (let v = 0; v <= h.nv; v++) line.push(g(h.at(u, v)));
-      paths.push({ ids: line.filter(v => v >= 0), rgb: GRID });
+      paths.push({ ids: line.filter(v => v >= 0), rgb: GRID, kind: 'grid' });
     }
     for (let v = 0; v <= h.nv; v += stepV) {
       const line = [];
       for (let u = 0; u <= h.nu; u++) line.push(g(h.at(u, v)));
-      paths.push({ ids: line.filter(v => v >= 0), rgb: GRID });
+      paths.push({ ids: line.filter(v => v >= 0), rgb: GRID, kind: 'grid' });
     }
   });
   for (const br of chain.bridges) {
-    for (let s = 0; s < br.cols.length; s += 3) paths.push({ ids: br.cols[s], rgb: GRID });
-    for (let k = 0; k < br.m; k += stepU) paths.push({ ids: br.cols.map(c => c[k]), rgb: GRID });
+    for (let s = 0; s < br.cols.length; s += 3) paths.push({ ids: br.cols[s], rgb: GRID, kind: 'grid' });
+    for (let k = 0; k < br.m; k += stepU) paths.push({ ids: br.cols.map(c => c[k]), rgb: GRID, kind: 'grid' });
   }
   if (!ex) return paths;
 
-  // The places worth marking, shared out over the pieces and set down on the
-  // grid. The walk itself was never a straight line on any surface, so what is
-  // drawn is the order they were reached, joined along the grid.
-  const all = ex.nodes.filter(n => n.visited &&
-    (n.isCamp || n.id === 0 || n.degree > 2 || n.supplies > 0));
-  if (!all.length) return paths;
-  // A few per piece, not every junction: joining thirty of them along the grid
-  // fills the whole thing with dashes and stops reading as a route.
-  const want = Math.min(all.length, Math.max(4, units.length * 5));
-  const keep = new Set([0, all.length - 1]);
-  for (let k = 0; k < want; k++) keep.add(Math.round((k * (all.length - 1)) / Math.max(1, want - 1)));
-  for (const n of all) if (n.isCamp) keep.add(all.indexOf(n));
-  const notable = all.filter((_, i) => keep.has(i));
+  // The route. It has to run the whole way: across a piece, through the
+  // cylinder, and on across the next one. Drawn piece by piece it came out in
+  // disconnected scraps with nothing joining them, which is not a route.
+  //
+  // Each piece is crossed along a corridor: a row of the grid that misses
+  // every hole. The route comes in at the rim it entered by, climbs to the
+  // corridor, runs along it past the waypoints, and drops to the rim it leaves
+  // by. The cylinder is crossed straight across at a fixed place round it.
+  const CROSS = k => k;                       // which way round the cylinder
+  const notable = pickWaypoints(ex, units.length);
   const per = Math.ceil(notable.length / units.length);
+  const routes = [];
+
   units.forEach((h, i) => {
-    const mine = notable.slice(i * per, (i + 1) * per);
-    const spots = [];
-    const free = (u, v) => h.at(u, v) >= 0;
-    mine.forEach((node, k) => {
-      // spread them over the piece with a couple of coprime strides, and
-      // step along if one lands in the hole
-      let u = 1 + ((k * 7) % (h.nu - 2));
-      let v = 1 + ((k * 5) % (h.nv - 2));
-      for (let tries = 0; tries < h.nv && !free(u, v); tries++) v = 1 + ((v + 1) % (h.nv - 2));
-      if (!free(u, v)) return;
-      spots.push({ node, u, v });
-    });
+    const inBridge = chain.bridges.find(b => b.right === i);
+    const outBridge = chain.bridges.find(b => b.left === i);
     const gid = (u, v) => { const x = h.at(u, v); return x < 0 ? -1 : x + offset[i]; };
-    for (let k = 0; k + 1 < spots.length; k++) {
-      const a = spots[k], b = spots[k + 1];
-      const line = [];
-      for (let u = a.u; u !== b.u; u += Math.sign(b.u - a.u)) line.push(gid(u, a.v));
-      for (let v = a.v; v !== b.v; v += Math.sign(b.v - a.v)) line.push(gid(b.u, v));
-      line.push(gid(b.u, b.v));
-      const ok = line.filter(v => v >= 0);
-      if (ok.length > 1) paths.push({ ids: ok, rgb: TRAIL, dash: 3, wide: true });
+
+    // a row that no hole reaches into
+    let corridor = -1;
+    for (let v = h.nv - 1; v >= 1; v--) {
+      let ok = true;
+      for (let u = 0; u <= h.nu && ok; u++) if (h.at(u, v) < 0) ok = false;
+      if (ok) { corridor = v; break; }
     }
+    if (corridor < 0) corridor = h.nv - 1;
+
+    const kIn = inBridge ? crossIndex(h, inBridge.rightHole, inBridge.m, true) : null;
+    const kOut = outBridge ? crossIndex(h, outBridge.leftHole, outBridge.m, false) : null;
+    const start = kIn ? kIn.uv : [1, corridor];
+    const finish = kOut ? kOut.uv : [h.nu - 1, corridor];
+
+    const mine = notable.slice(i * per, (i + 1) * per);
+    const line = [];
+    // Shortest way from one place to the next across the grid, going round the
+    // holes rather than through them. Ruling a line out and then dropping the
+    // vertices that were not there left the route jumping the gap, which is
+    // not a route; a search cannot do that, because it only ever steps to a
+    // square that exists.
+    const step = (a, b) => {
+      const path = walkGrid(h, a, b);
+      for (let k = 0; k + 1 < path.length; k++) line.push(gid(path[k][0], path[k][1]));
+    };
+    // in from the rim, along the corridor past the waypoints, out to the rim
+    const stops = [start, [start[0], corridor]];
+    const spots = [];
+    mine.forEach((node, k) => {
+      const t = mine.length === 1 ? 0.5 : k / (mine.length - 1);
+      const u = Math.round(start[0] + (finish[0] - start[0]) * t);
+      const uu = Math.max(1, Math.min(h.nu - 1, u));
+      if (gid(uu, corridor) >= 0) spots.push({ node, u: uu, v: corridor });
+    });
+    for (const sp of spots) stops.push([sp.u, corridor]);
+    stops.push([finish[0], corridor], finish);
+    for (let k = 0; k + 1 < stops.length; k++) step(stops[k], stops[k + 1]);
+    line.push(gid(finish[0], finish[1]));
+    routes.push(line.filter(v => v >= 0));
+
     for (const sp of spots) {
       const v = gid(sp.u, sp.v);
-      if (v >= 0) paths.push({ ids: [], dotId: v, rgb: sp.node.isCamp ? CAMP : MARK, r: sp.node.isCamp ? 4 : 2 });
+      if (v >= 0) paths.push({ ids: [], dotId: v, rgb: sp.node.isCamp ? CAMP : MARK, r: sp.node.isCamp ? 4 : 2, kind: 'mark' });
     }
+    if (kIn) routes.push([gid(kIn.uv[0], kIn.uv[1])].filter(v => v >= 0));
   });
+
+  // and across each cylinder, joining the piece before to the piece after
+  chain.bridges.forEach(br => {
+    const k = crossIndex(units[br.left], br.leftHole, br.m, false).index;
+    routes.push(br.cols.map(c => c[k]));
+  });
+
+  for (const line of routes) {
+    if (line.length > 1) paths.push({ ids: line, rgb: TRAIL, dash: 3, wide: true, kind: 'trail' });
+  }
   return paths;
+}
+
+// Breadth-first across a handle's grid, avoiding whatever the holes took out.
+function walkGrid(h, from, to) {
+  const w = h.nu + 1;
+  const key = (u, v) => v * w + u;
+  const prev = new Map([[key(from[0], from[1]), null]]);
+  const q = [from];
+  for (let i = 0; i < q.length; i++) {
+    const [u, v] = q[i];
+    if (u === to[0] && v === to[1]) break;
+    for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nu2 = u + du, nv2 = v + dv;
+      if (nu2 < 0 || nv2 < 0 || nu2 > h.nu || nv2 > h.nv) continue;
+      if (h.at(nu2, nv2) < 0) continue;
+      const k = key(nu2, nv2);
+      if (prev.has(k)) continue;
+      prev.set(k, [u, v]);
+      q.push([nu2, nv2]);
+    }
+  }
+  const out = [];
+  let cur = to;
+  if (!prev.has(key(to[0], to[1]))) return [from];
+  while (cur) { out.push(cur); cur = prev.get(key(cur[0], cur[1])); }
+  return out.reverse();
+}
+
+// Where a route meets a rim, and how far round the cylinder that is. The
+// cylinder joins index k of one rim to index m-1-k of the other, so the two
+// sides have to agree or the route steps off into space at the join.
+function crossIndex(h, hole, m, isRight) {
+  const uv = rimUV(h, hole);
+  const idx = h.hu + Math.floor(h.hv / 2);
+  // The cylinder joins index k of the near rim to index m-1-k of the far one,
+  // since the far rim runs the other way round so the two agree about which
+  // side is out. Read the wrong one and the route steps off into space where
+  // the pieces meet.
+  return isRight ? { index: idx, uv: uv[m - 1 - idx] } : { index: idx, uv: uv[idx] };
+}
+
+// A handful of places worth marking, spread through the walk in the order they
+// were reached.
+function pickWaypoints(ex, pieces) {
+  const all = ex.nodes.filter(n => n.visited &&
+    (n.isCamp || n.id === 0 || n.degree > 2 || n.supplies > 0));
+  if (!all.length) return [];
+  const want = Math.min(all.length, Math.max(4, pieces * 4));
+  const keep = new Set([0, all.length - 1]);
+  for (let k = 0; k < want; k++) keep.add(Math.round((k * (all.length - 1)) / Math.max(1, want - 1)));
+  all.forEach((n, i) => { if (n.isCamp) keep.add(i); });
+  return all.filter((_, i) => keep.has(i));
 }
