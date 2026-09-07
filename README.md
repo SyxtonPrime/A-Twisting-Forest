@@ -91,172 +91,21 @@ cannot be glued to a rim that is a closed circle in the middle of a sheet,
 because a circle in the middle of a piece can never be a shared edge, and that
 is why the other net below falls into separate pieces however it is cut.
 
-**The pieces.** The same world cut the other way, and a button that rolls it
-up.
+**The roll.** Two acts, the way a square is always shown becoming a torus:
+first the sheet curls round into a tube, then the tube bends round until its
+two ends meet. Each act is a bend of known radius, so the sheet stays a sheet
+all the way through, and the curvature runs from nothing up to `1/r` and then
+from nothing up to `1/R`.
 
-The body is a tube with rounded ends, so cutting it once along its underside
-opens it into a single piece, widest in the middle and drawing to a point at
-each end, with a hole where every tube met it. Each tube is a tube as well, so
-each is cut free at both ends and cut once along its length, and lies flat as a
-strip.
+Dragging every point in a straight line from where it starts to where it ends
+up gets there as well, and that is what it used to do. It goes through shapes
+that are not surfaces on the way, and there is nothing to follow.
 
-What is left is the gluing, and the gluing is the whole of the world's shape:
-the two long edges of the body join back to each other, the two long edges of
-each strip join to each other, and each end of a strip goes into one of the
-holes. A strip entering its second hole the same way round makes a handle;
-entering it reversed makes a Klein bottle.
-
-Nothing with a handle in it can be laid flat in one piece, which is why the
-strips come away rather than staying attached. That is not a shortcut; it is
-the reason nets have glue tabs. Where the walk crosses a cut it is broken, on
-the body's seam and where it leaves for a strip, because that is where the
-world was opened.
-
-The net and the solid are the same mesh. Every vertex knows where it sits in
-each, so running one into the other rolls it up.
-
-**The solid.** The same surface as something you can drag, and it is built
-rather than found. A capsule stands for the sphere, one pair of holes is cut
-per tube, and a tube is stitched between each pair. Stitch the far end the same
-way round and it is an ordinary handle; stitch it reversed and it is a twisted
-handle. That reversal is the whole of the topology and none of it is
-approximated: the tests check the built mesh's Euler characteristic and
-orientability against what the normal-form polygon says, by a separate route,
-and check it is a closed manifold with every edge bordering exactly two faces.
-
-The body follows a shallow arc rather than a straight line. A straight capsule
-reads as a rail with things bolted to it; bending it puts the tubes on the
-outside of a curve, where they splay apart the way they do in a drawn pretzel.
-
-Each arch is a plain semicircle from one foot to the other. Waypoints joined
-by a spline gave a pointed arch, which reads as a hoop stood on a rail; a
-circle leaves both feet straight up and comes over evenly, so the hole under it
-is round. Neighbouring tubes then stand as close as their holes allow, and the
-whole thing is smoothed afterwards, which turns the joins into fillets. What
-was a tube bolted onto a bar becomes one piece of material with holes through
-it.
-
-The smoothing is Taubin's: one pass in, one pass out. A plain average would
-shrink the whole thing away; alternating with an outward pass leaves the size
-alone and only takes the corners off. It moves vertices and nothing else, so
-the quad grid and the topology survive it exactly.
-
-A twisted tube cannot close up in space without passing through something, so
-it is routed the way the classic picture routes it: over the top, round, and
-back up into its hole from inside the capsule. You can watch it go through the
-wall. It is all one material, because colouring the tubes differently only
-made it look like a diagram.
-
-**And the map on the solid.** A button draws it: a faint grid over the whole
-surface, a waypoint at the places worth marking, and your journey between them
-as a dotted line. The tree lies on the body, because a tree lies flat on a
-sphere. Each loop you closed climbs to its handle: the first of a pair goes
-through the tube, and the second goes up and rings it once, which is the other
-independent way to walk a handle and the reason two loops need only one tube
-between them.
-
-Every point of it is read off the mesh, interpolated between real vertices and
-nudged out along the surface. The body is bent and then smoothed, so anything
-placed by the arithmetic the mesh was built from sinks into it or floats off it
-near the joins, which is exactly where the interesting parts of the walk are.
-
-Two things had to give for it to be legible. The places are laid out in the
-body's own coordinates rather than on a flat sheet that is then wrapped round
-it, since wrapping squashes one direction against the other; and distances
-round the body are scaled by how wide it is, so the tapering ends do not get
-crowded. And not every clearing gets a waypoint. Eighty hours of walking leaves
-seventy-odd places, and marking all of them buries the trail under its own
-dots, so only the camp, the dead fire, the junctions and anywhere with
-something to be had are marked.
-
-Even so, a walk of that length has a tree with a diameter of forty-odd hops,
-and there is no laying that flat on a small world without it coiling. The
-coiling is honest. It is what a long walk on a small world looks like.
-
-An earlier version meshed the normal-form polygon and let a physical
-relaxation find a shape, with springs, repulsion, surface tension and pressure.
-It was honest and it looked like crumpled paper, because these surfaces are
-flat everywhere except at their cone points and nothing in that energy says
-"look like a pretzel". Building the classic picture directly is both prettier
-and more exact, so the relaxation is gone.
-
-## One more sharp edge
-
-Anything drawn on the surface comes in two kinds. A path given as vertex
-indices follows the surface for free however it moves. A path given as explicit
-points has to be rebuilt whenever the surface does, and quietly draws itself in
-the wrong place if it is not: while the net was rolling up, the grid and the
-seams moved with it and the walk stayed behind in the shape of the finished
-solid, arcing through empty air where the tubes were going to be.
-
-## The correspondence
-
-The chain net and the solid have to be the same mesh before one can roll into
-the other, and that needs a map between the pentagon `a b a⁻¹ b⁻¹ c` and a
-torus with a disc taken out of it. `src/handle.js` is that map.
-
-Going pentagon-first does not work. The pentagon is a cut of the surface along
-two loops based on the rim, and writing that cut down on a grid is awkward.
-Going torus-first does work, and hands you the pentagon.
-
-Take the torus as a grid in `u` and `v`, both wrapped. Cut along `u = 0` and
-along `v = 0` and it opens into a square, which is the closed torus,
-`a b a⁻¹ b⁻¹`. Take a disc out of the middle, and it is no longer a disc
-itself, so cut a slit from the hole out to the edge. Now it is simply
-connected, and its boundary reads round as
-
-```
-a   b   a⁻¹   (part of b⁻¹)   s   c   s⁻¹   (rest of b⁻¹)
-```
-
-**The rim `c` is one unbroken arc, with the two lips of the slit either side of
-it.** That is the whole point, and it is what the other net could never
-manage. A rim that is a closed circle in the middle of a sheet can never be
-glued to anything edge to edge; a rim that is an arc of the boundary can. The
-slit is what turns one into the other, and it costs nothing, because its two
-lips are glued straight back to each other.
-
-It does not break the gluing counts either. The slit meets the `u = 0` edge and
-splits it in two, so `b⁻¹` arrives in two pieces, but the two pieces have
-between them exactly as many cells as `b`, so every cell still has its partner.
-
-The map into three dimensions is then the identity on `(u, v)`: a grid point
-goes to the point of a torus of revolution at those two angles. The duplicated
-vertices, the far edges and the two lips, land on the same point, which is
-exactly what it means for them to be glued. Closing the ring with a flip
-instead gives a Klein bottle with a disc out, which is the twisted handle.
-
-The tests check all of it: Euler characteristic −1 either way, the rim a single
-circle with every point of it having two neighbours, no edge bordering more
-than two faces, orientable when plain and not when twisted, every glued pair
-landing on the same point, and every vertex the right distance from the ring's
-core circle.
-
-## The assembly
-
-`src/chain.js` puts the handles in a row with a cylinder between each pair, as
-one mesh that is both the net and the solid. Because a rim is an unbroken arc
-of a cut piece's boundary rather than a circle in the middle of it, a cylinder
-can sit against it edge to edge and the whole chain lies down flat in one
-piece.
-
-Laying a handle out is Tutte's embedding: pin its boundary to a convex polygon
-and let every other vertex settle at the average of its neighbours. A square
-for a lone handle, a pentagon for an end of the chain, a hexagon for a middle,
-with the rims pinned to whole sides. Convex is the one thing Tutte asks for,
-and it is what makes the result a drawing rather than a knot: it cannot fold
-over, so there is nothing to check afterwards.
-
-The rest is bookkeeping. Each handle's grid is turned before it is wrapped, so
-its rim lands on the outer equator facing the piece it joins. The cylinders are
-ruled between the two rims they connect, and the far rim runs the other way
-round so the two agree about which side is out.
-
-The tests check the assembled chain the same way as everything else: Euler
-characteristic `2 − 2n`, no free edges anywhere, every edge bordering exactly
-two faces, one twist anywhere making the whole thing one-sided, the net lying
-flat in the plane and wider than it is tall, and every glued pair meeting once
-it is rolled up.
+**The grid and the walk.** A grid over the net, the places worth marking, and
+the route between them joined along it. All of it is given as vertex indices
+rather than as points, so it rides the surface as it rolls up without being
+worked out again. Only a handful of waypoints per piece: joining thirty of them
+fills the whole thing with dashes and stops reading as a route.
 
 ## Where this is going
 
@@ -286,17 +135,13 @@ later, and the smoothing pass is chosen to preserve it.
   stitched tube between each pair.
 - `src/handle.js` — one handle of the chain in both its forms at once: the cut
   piece, its gluings, and where each of its points sits on the torus.
+- `src/scene3d.js` — the rasteriser and orbit controls.
 - `src/chain.js` — the handles in a row with the cylinders between them, laid
   out flat by Tutte's embedding and rolled up by interpolation.
-- `src/net.js` — the same world cut into separate flat pieces instead, each
-  vertex holding both where it lies flat and where it lies on the solid, which
-  is what lets one run into the other.
-- `src/overlay.js` — the map drawn on the surface, depth tested against it.
 - `src/mesh.js` — the quotient mesh of a polygon, and the face-winding pass
   that decides orientability. The winding pass is what `handlebody.js` uses to
   check itself; the quotient mesh is now only used by the tests, where it is a
   second opinion on what `normalForm` builds.
-- `src/scene3d.js` — the rasteriser and orbit controls.
 - `src/polygon.js`, `src/world.js`, `src/rng.js` — the polygon that names the
   surface, terrain used only by the tests, and seeded randomness.
 - `src/main.js` — DOM wiring. The seed lives in the URL hash: `#seed=word`.

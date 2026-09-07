@@ -2,7 +2,6 @@ import { Polygon, DIRS, I2, mul, applyM, det, key, same, surfaceName, normalForm
 import { Explore } from '../src/explore.js';
 import { World } from '../src/world.js';
 import { buildMesh } from '../src/mesh.js';
-import { buildHandlebody } from '../src/handlebody.js';
 import { buildHandle, handleGluings, boundaryLoop } from '../src/handle.js';
 import { buildChain, chainGluings } from '../src/chain.js';
 import { mulberry32 } from '../src/rng.js';
@@ -555,88 +554,6 @@ test('explore: running out of food ends it', () => {
   const n = ex.steps;
   walk(ex, 10, true);
   eq(ex.steps, n, 'and nothing moves after that');
-});
-
-test('handlebody: the built solid has the topology the loops asked for', () => {
-  const cases = [[], [false], [true], [false, false], [true, false], [true, true],
-                 [false, false, false], [true, false, true], [false, false, false, false]];
-  for (const twists of cases) {
-    const n = twists.length, tw = twists.filter(Boolean).length;
-    const m = buildHandlebody(twists);
-    const label = JSON.stringify(twists);
-    eq(m.chi, 2 - 2 * n, `${label}: a tube costs two from chi whichever way it goes on`);
-    eq(m.orientable, tw === 0, `${label}: one twist is enough to make it one-sided`);
-    // and it agrees with the polygon, which knows nothing about this construction
-    const caps = tw === 0 ? 0 : 2 * n;
-    const info = normalForm(tw === 0 ? n : 0, caps, 4).classify();
-    eq(m.chi, info.chi, `${label}: chi agrees with the normal form`);
-    eq(m.orientable, info.orientable, `${label}: orientability agrees with the normal form`);
-  }
-});
-
-test('handlebody: it stays a regular quad grid, which later phases need', () => {
-  for (const twists of [[], [false], [false, true]]) {
-    const m = buildHandlebody(twists);
-    const label = JSON.stringify(twists);
-    let tris = 0;
-    for (let f = 0; f < m.F; f++) {
-      const q = [m.faces[f*4], m.faces[f*4+1], m.faces[f*4+2], m.faces[f*4+3]];
-      if (new Set(q).size === 3) tris++;
-    }
-    // only the two ends of the capsule are fans; everything else is quads
-    eq(tris, 2 * m.geom.C, `${label}: only the two poles are triangles`);
-    ok(tris / m.F < 0.06, `${label}: the mesh is overwhelmingly quads`);
-    // smoothing moves vertices and must not have changed the topology
-    eq(m.chi, 2 - 2 * twists.length, `${label}: smoothing left chi alone`);
-    eq(m.orientable, twists.every(t => !t), `${label}: smoothing left orientability alone`);
-    // and must not have collapsed anything: no zero-length edge
-    for (let e = 0; e < m.edgeA.length; e++) {
-      const a = m.edgeA[e], b = m.edgeB[e];
-      const d = Math.hypot(m.positions[a*3] - m.positions[b*3],
-                           m.positions[a*3+1] - m.positions[b*3+1],
-                           m.positions[a*3+2] - m.positions[b*3+2]);
-      ok(d > 1e-4, `${label}: edge ${e} collapsed to nothing`);
-    }
-  }
-});
-
-test('handlebody: the mesh is a closed surface with nothing stranded', () => {
-  for (const twists of [[], [true], [false, true, false]]) {
-    const m = buildHandlebody(twists);
-    const label = JSON.stringify(twists);
-    // every vertex is used by some face
-    const used = new Uint8Array(m.V);
-    for (let i = 0; i < m.faces.length; i++) used[m.faces[i]] = 1;
-    eq(used.indexOf(0), -1, `${label}: no vertex left stranded`);
-    // every face is a triangle or a quad, never a sliver
-    for (let f = 0; f < m.F; f++) {
-      const q = [m.faces[f*4], m.faces[f*4+1], m.faces[f*4+2], m.faces[f*4+3]];
-      ok(new Set(q).size >= 3, `${label}: face ${f} has fewer than three corners`);
-    }
-    // closed and manifold: every edge is shared by exactly two faces
-    const count = new Map();
-    for (let f = 0; f < m.F; f++) {
-      for (let i = 0; i < 4; i++) {
-        const a = m.faces[f*4+i], b = m.faces[f*4+(i+1)%4];
-        if (a === b) continue;
-        const k = Math.min(a,b) + ':' + Math.max(a,b);
-        count.set(k, (count.get(k) || 0) + 1);
-      }
-    }
-    for (const [k, c] of count) eq(c, 2, `${label}: edge ${k} borders ${c} faces, not two`);
-    eq(count.size, m.edgeA.length, `${label}: edge list matches`);
-    // connected
-    const seen = new Uint8Array(m.V);
-    const stack = [0]; seen[0] = 1; let reached = 1;
-    while (stack.length) {
-      const v = stack.pop();
-      for (let i = m.start[v]; i < m.start[v+1]; i++) {
-        const w = m.adj[i];
-        if (!seen[w]) { seen[w] = 1; reached++; stack.push(w); }
-      }
-    }
-    eq(reached, m.V, `${label}: all one piece`);
-  }
 });
 
 // Glue a cut piece up and report what surface it turned out to be.

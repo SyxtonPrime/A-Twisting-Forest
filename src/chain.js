@@ -39,21 +39,28 @@ export function buildChain(plan, opts = {}) {
 
   // ---- one numbering for everything -----------------------------------
   const solid = [], flat = [], faces = [], offset = [];
-  const push = (sx, sy, sz) => { solid.push([sx, sy, sz]); flat.push([0, 0, 0]); return solid.length - 1; };
+  // For every vertex of a handle, the two angles it sits at. The roll is
+  // worked out from these rather than by dragging each point in a straight
+  // line to where it ends up, which is what made it impossible to follow.
+  const ab = [];                                // [unit, alpha, beta] or null
+  const push = (sx, sy, sz, meta) => {
+    solid.push([sx, sy, sz]); flat.push([0, 0, 0]); ab.push(meta || null);
+    return solid.length - 1;
+  };
 
+  const TAU = Math.PI * 2;
+  const step = 2 * (R + r) + gap * CELL;
   units.forEach((h, i) => {
     offset.push(solid.length);
-    for (let v = 0; v < h.V; v++) push(h.solid[v * 3], h.solid[v * 3 + 1], h.solid[v * 3 + 2]);
+    const dx = (i - (n - 1) / 2) * step;
+    for (let v = 0; v < h.V; v++) {
+      const alpha = (((h.uv[v][0] + h.aOff) % h.nu) + h.nu) % h.nu * TAU / h.nu;
+      const beta = (((h.uv[v][1] + h.bOff) % h.nv) + h.nv) % h.nv * TAU / h.nv;
+      push(h.solid[v * 3] + dx, h.solid[v * 3 + 1], h.solid[v * 3 + 2], [i, alpha, beta]);
+    }
     for (const f of h.faces) faces.push(f.map(x => x + offset[i]));
   });
   const g = (i, v) => v + offset[i];
-
-  // Slide each donut along so they stand in a row, just clear of each other.
-  const step = 2 * (R + r) + gap * CELL;
-  units.forEach((h, i) => {
-    const dx = (i - (n - 1) / 2) * step;
-    for (let v = 0; v < h.V; v++) solid[g(i, v)][0] += dx;
-  });
 
   // ---- the cylinders between them --------------------------------------
   const bridges = [];
@@ -71,7 +78,7 @@ export function buildChain(plan, opts = {}) {
       const col = [];
       for (let k = 0; k < m; k++) {
         const p = solid[a[k]], q = solid[b[m - 1 - k]];
-        col.push(push(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t));
+        col.push(push(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t, null));
       }
       cols.push(col);
     }
@@ -116,7 +123,8 @@ export function buildChain(plan, opts = {}) {
   const rgb = new Uint8Array(F * 3);
   for (let f = 0; f < F; f++) { rgb[f * 3] = 198; rgb[f * 3 + 1] = 191; rgb[f * 3 + 2] = 173; }
 
-  return { V, F, faces: fa, positions: pos, flat: fl, rgb, seam: [], units, offset, bridges, plan };
+  return { V, F, faces: fa, positions: pos, flat: fl, rgb, seam: [], units, offset, bridges, plan,
+           ab, R, r, step, n };
 }
 
 // Where each boundary vertex of a handle goes on the flat drawing. The rims
@@ -253,4 +261,153 @@ export function chainGluings(chain) {
     for (const col of br.cols) out.push([col[0], col[col.length - 1]]);
   }
   return out;
+}
+
+// The roll, in two acts, the way a square is always shown becoming a torus:
+// first the sheet curls round into a tube, then the tube bends round until its
+// two ends meet. Dragging every point in a straight line from where it starts
+// to where it ends up gets there as well, but it goes through shapes that are
+// not surfaces on the way and there is nothing to follow.
+//
+// Each act is a bend of known radius, so the sheet stays a sheet throughout:
+// curvature runs from nothing up to 1/r for the tube, then from nothing up to
+// 1/R for the ring.
+export function chainPositions(chain, t) {
+  const { V, ab, flat, positions, R, r, bridges } = chain;
+  const out = chain._scratch || (chain._scratch = new Float32Array(V * 3));
+  const ease = x => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+  const CURL = 0.52;                             // where the first act ends
+  const curl = ease(Math.min(1, t / CURL));
+  const ring = ease(Math.max(0, (t - CURL) / (1 - CURL)));
+
+  for (let i = 0; i < V; i++) {
+    const m = ab[i];
+    if (!m) continue;                            // a cylinder: ruled, below
+    const [, alpha, beta] = m;
+    const dx = positions[i * 3] - torus(alpha, beta, R, r)[0];   // its place in the row
+    const p = bend(alpha, beta, R, r, curl, ring);
+    // the flat piece is the pentagon, not the bare rectangle, so the first act
+    // carries it from one to the other as it curls
+    const fx = flat[i * 3], fy = flat[i * 3 + 1];
+    out[i * 3] = fx + (p[0] + dx - fx) * curl;
+    out[i * 3 + 1] = fy + (p[1] - fy) * curl;
+    out[i * 3 + 2] = 0 + (p[2] - 0) * curl;
+  }
+  // cylinders stay ruled between the rims they join, wherever those have got to
+  for (const br of bridges) {
+    const cols = br.cols, last = cols.length - 1;
+    for (let s = 1; s < last; s++) {
+      const f = s / last;
+      for (let k = 0; k < br.m; k++) {
+        const a = cols[0][k], b = cols[last][k], c = cols[s][k];
+        for (let d = 0; d < 3; d++) {
+          out[c * 3 + d] = out[a * 3 + d] + (out[b * 3 + d] - out[a * 3 + d]) * f;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function torus(alpha, beta, R, r) {
+  const w = R + r * Math.cos(alpha);
+  return [w * Math.cos(beta), r * Math.sin(alpha), w * Math.sin(beta)];
+}
+
+// curl: 0 flat, 1 rolled into a tube. ring: 0 straight tube, 1 closed ring.
+function bend(alpha, beta, R, r, curl, ring) {
+  // act one: the sheet rolls up. y and z are the cross-section.
+  let y, z;
+  if (curl < 1e-4) { y = r * alpha; z = r; }
+  else {
+    const rho = r / curl;
+    const th = (r * alpha) / rho;
+    y = rho * Math.sin(th);
+    z = rho * Math.cos(th) + (r - rho);
+  }
+  // act two: the tube bends round. z runs along the tube, and the ring closes
+  // in the xz plane, which is where the finished torus lives.
+  const X = R * beta;
+  if (ring < 1e-4) return [z, y, X];
+  const rho = R / ring;
+  const ph = X / rho;
+  const rad = rho + z;
+  // the ring's centre slides in as it closes, so the flat limit stays put and
+  // the closed limit lands exactly on the torus
+  return [rad * Math.cos(ph) - rho + R * ring, y, rad * Math.sin(ph)];
+}
+
+// A grid over the net, and the walk marked on it. Everything is given as
+// vertex indices rather than points, so it follows the surface as it rolls up
+// without being worked out again.
+export function chainOverlay(chain, ex, opts = {}) {
+  const GRID = [174, 167, 150], TRAIL = [58, 51, 42], MARK = [30, 26, 22], CAMP = [176, 122, 20];
+  // Tutte crowds vertices towards the boundary, so a fine grid bunches up
+  // along the edges and reads as speckle rather than as a grid.
+  const stepU = opts.stepU || 6, stepV = opts.stepV || 5;
+  const paths = [];
+  const { units, offset } = chain;
+
+  units.forEach((h, i) => {
+    const g = v => (v < 0 ? -1 : v + offset[i]);
+    for (let u = 0; u <= h.nu; u += stepU) {
+      const line = [];
+      for (let v = 0; v <= h.nv; v++) line.push(g(h.at(u, v)));
+      paths.push({ ids: line.filter(v => v >= 0), rgb: GRID });
+    }
+    for (let v = 0; v <= h.nv; v += stepV) {
+      const line = [];
+      for (let u = 0; u <= h.nu; u++) line.push(g(h.at(u, v)));
+      paths.push({ ids: line.filter(v => v >= 0), rgb: GRID });
+    }
+  });
+  for (const br of chain.bridges) {
+    for (let s = 0; s < br.cols.length; s += 3) paths.push({ ids: br.cols[s], rgb: GRID });
+    for (let k = 0; k < br.m; k += stepU) paths.push({ ids: br.cols.map(c => c[k]), rgb: GRID });
+  }
+  if (!ex) return paths;
+
+  // The places worth marking, shared out over the pieces and set down on the
+  // grid. The walk itself was never a straight line on any surface, so what is
+  // drawn is the order they were reached, joined along the grid.
+  const all = ex.nodes.filter(n => n.visited &&
+    (n.isCamp || n.id === 0 || n.degree > 2 || n.supplies > 0));
+  if (!all.length) return paths;
+  // A few per piece, not every junction: joining thirty of them along the grid
+  // fills the whole thing with dashes and stops reading as a route.
+  const want = Math.min(all.length, Math.max(4, units.length * 5));
+  const keep = new Set([0, all.length - 1]);
+  for (let k = 0; k < want; k++) keep.add(Math.round((k * (all.length - 1)) / Math.max(1, want - 1)));
+  for (const n of all) if (n.isCamp) keep.add(all.indexOf(n));
+  const notable = all.filter((_, i) => keep.has(i));
+  const per = Math.ceil(notable.length / units.length);
+  units.forEach((h, i) => {
+    const mine = notable.slice(i * per, (i + 1) * per);
+    const spots = [];
+    const free = (u, v) => h.at(u, v) >= 0;
+    mine.forEach((node, k) => {
+      // spread them over the piece with a couple of coprime strides, and
+      // step along if one lands in the hole
+      let u = 1 + ((k * 7) % (h.nu - 2));
+      let v = 1 + ((k * 5) % (h.nv - 2));
+      for (let tries = 0; tries < h.nv && !free(u, v); tries++) v = 1 + ((v + 1) % (h.nv - 2));
+      if (!free(u, v)) return;
+      spots.push({ node, u, v });
+    });
+    const gid = (u, v) => { const x = h.at(u, v); return x < 0 ? -1 : x + offset[i]; };
+    for (let k = 0; k + 1 < spots.length; k++) {
+      const a = spots[k], b = spots[k + 1];
+      const line = [];
+      for (let u = a.u; u !== b.u; u += Math.sign(b.u - a.u)) line.push(gid(u, a.v));
+      for (let v = a.v; v !== b.v; v += Math.sign(b.v - a.v)) line.push(gid(b.u, v));
+      line.push(gid(b.u, b.v));
+      const ok = line.filter(v => v >= 0);
+      if (ok.length > 1) paths.push({ ids: ok, rgb: TRAIL, dash: 3, wide: true });
+    }
+    for (const sp of spots) {
+      const v = gid(sp.u, sp.v);
+      if (v >= 0) paths.push({ ids: [], dotId: v, rgb: sp.node.isCamp ? CAMP : MARK, r: sp.node.isCamp ? 4 : 2 });
+    }
+  });
+  return paths;
 }

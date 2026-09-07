@@ -2,28 +2,24 @@ import { Explore, START_SUPPLIES } from './explore.js';
 import { drawSketch } from './sketch.js';
 import { drawWorldMap } from './worldmap.js';
 import { normalForm } from './polygon.js';
-import { buildHandlebody } from './handlebody.js';
-import { buildNet, netSeams } from './net.js';
-import { buildChain } from './chain.js';
-import { walkOnSolid } from './overlay.js';
+import { buildChain, chainPositions, chainOverlay } from './chain.js';
 import { Solid } from './scene3d.js';
 import { randomSeedWord } from './rng.js';
 
 const $ = id => document.getElementById(id);
 const settings = { revealDelay: 900 };
 
-let ex, solid, netSolid = null, solidWalk = null, solidSeams = [], walkOn = true, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
+let ex, netSolid = null, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
 
 function start(seed) {
   const h = new URLSearchParams(location.hash.slice(1));
   const s = seed || h.get('seed') || randomSeedWord();
   location.hash = `seed=${s}`;
   if (solidRAF) cancelAnimationFrame(solidRAF);
-  solidRAF = 0; solid = null; netSolid = null; solidWalk = null; solidSeams = []; walkOn = true; rolling = null; revealed = false; mapOpen = false; view = 'map';
+  solidRAF = 0; netSolid = null; rolling = null; revealed = false; mapOpen = false; view = 'map';
   ex = new Explore(s);
   $('overlay').hidden = true;
   $('reveal').hidden = true;
-  $('solid').hidden = true;
   $('netsolid').hidden = true;
   $('worldmap').hidden = false;
   render();
@@ -145,59 +141,47 @@ function sizeStage() {
   const side = stageSide();
   drawWorldMap($('worldmap'), ex, side, side);
   if (netSolid) { netSolid.resize(side, side); netSolid.draw(); }
-  if (solid) { solid.resize(side, side); solid.draw(); }
 }
 
 function setView(v) {
   view = v;
   $('worldmap').hidden = v !== 'map';
   $('netsolid').hidden = v !== 'net';
-  $('solid').hidden = v !== 'solid';
   for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
     b.setAttribute('aria-pressed', String(b.dataset.view === v));
-  $('walk').hidden = v !== 'solid';
   $('roll').hidden = v !== 'net' || !netSolid;
-  $('stage-hint').textContent = v === 'solid'
-    ? 'drag to turn it over'
-    : v === 'net'
+  $('stage-hint').textContent = v === 'net'
     ? (netSolid && netSolid.morph > 0.5
         ? 'the same piece, rolled up'
         : 'one piece. every handle is a pentagon, every join a cylinder')
     : 'everywhere you walked lies flat on the sphere, except the loops you closed';
-  if (v === 'solid' && solid) solid.draw();
 }
 
-// The solid is built, not settled, so there is nothing to wait for: the
-// shape is right the moment it exists.
+// The world, as one piece that lies flat and rolls up.
 function buildSolid() {
-  const closed = buildHandlebody(ex.tubePlan().map(t => t.twisted));
-  const mesh = buildNet(closed);            // the same thing, cut open
-  solid = new Solid($('solid'), mesh, mesh.positions);
-  solid.el = 0.42;
-  solid.setMorph(1);
-  solidSeams = netSeams(mesh);
-  solidWalk = walkOnSolid(ex, mesh, solid.pos);
-  solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams;
-  solid.resize(stageSide(), stageSide());
-  // the chain: the net that rolls up, in the same mesh both ways
   const chain = buildChain(ex.tubePlan());
-  if (chain) {
-    netSolid = new Solid($('netsolid'), chain, chain.positions);
-    netSolid.autoSpin = false;
-    netSolid.setMorph(0);
-    netSolid.az = 0; netSolid.el = 0;
-    netSolid.resize(stageSide(), stageSide());
-  }
+  if (!chain) return;
+  netSolid = new Solid($('netsolid'), chain, chain.positions);
+  netSolid.autoSpin = false;
+  netSolid.chain = chain;
+  netSolid.overlay = chainOverlay(chain, ex);
+  setRoll(0);
+  netSolid.az = 0; netSolid.el = 0;
+  netSolid.resize(stageSide(), stageSide());
   $('roll').textContent = 'roll it up';
 
   const spin = () => {
     solidRAF = requestAnimationFrame(spin);
     if (rolling) stepRoll();
-    else if (solid.autoSpin) solid.az += 0.004;
-    if (!$('solid').hidden) solid.draw();
-    if (netSolid && !$('netsolid').hidden) netSolid.draw();
+    if (!$('netsolid').hidden) netSolid.draw();
   };
   spin();
+}
+
+// Position everything for a given point in the roll, and remember where we are.
+function setRoll(t) {
+  netSolid.morph = t;
+  netSolid.pos = chainPositions(netSolid.chain, t);
 }
 
 // Rolling up, and unrolling. The camera swings square to the net as it opens
@@ -219,7 +203,7 @@ function stepRoll() {
   const r = rolling;
   const raw = Math.min(1, (performance.now() - r.t0) / r.ms);
   const e = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
-  netSolid.setMorph(r.from + (r.to - r.from) * e);
+  setRoll(r.from + (r.to - r.from) * e);
   // The net lies in a plane, so square-on to it is no turn at all.
   netSolid.az = r.az + (r.toAz - r.az) * e;
   netSolid.el = r.el + (r.toEl - r.el) * e;
@@ -260,11 +244,6 @@ $('same').onclick = () => start(ex.seed);
 for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
   b.onclick = () => setView(b.dataset.view);
 $('roll').onclick = () => startRoll(netSolid && netSolid.morph > 0.5 ? 0 : 1);
-$('walk').onclick = () => {
-  walkOn = !walkOn;
-  $('walk').textContent = walkOn ? 'hide the walk' : 'show the walk';
-  if (solid) { solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams; solid.draw(); }
-};
 
 let resizeTimer;
 window.addEventListener('resize', () => {
@@ -273,4 +252,5 @@ window.addEventListener('resize', () => {
 });
 
 start();
-window.dev = { ex: () => ex, render, refreshWalk: () => { if (solid) { solidWalk = walkOnSolid(ex, solid.mesh, solid.pos); solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams; } }, setWalk: v => { walkOn = v; if (solid) solid.overlay = v ? solidWalk : null; }, setMapOpen: v => { mapOpen = v; }, settings, solid: () => solid, netSolid: () => netSolid, setView };
+window.dev = { ex: () => ex, render, setMapOpen: v => { mapOpen = v; }, settings,
+               netSolid: () => netSolid, setRoll, setView };

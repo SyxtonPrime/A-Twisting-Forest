@@ -259,7 +259,10 @@ export class Solid {
         }
         prev = p;
       }
-      if (path.dot) this.blob(this.point(c, path.dot[0], path.dot[1], path.dot[2]), col, path.r || 2);
+      const d = path.dotId !== undefined
+        ? [this.pos[path.dotId * 3], this.pos[path.dotId * 3 + 1], this.pos[path.dotId * 3 + 2]]
+        : path.dot;
+      if (d) this.blob(this.point(c, d[0], d[1], d[2]), col, path.r || 2);
     }
   }
 

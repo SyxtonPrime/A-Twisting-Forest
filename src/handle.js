@@ -104,7 +104,7 @@ export function buildHandle(opts = {}) {
     solid[i * 3 + 2] = rad * Math.sin(b);
   }
 
-  return { nu, nv, hu, hv, R, r, rims, holes, uv, faces, solid, at, lower,
+  return { nu, nv, hu, hv, R, r, rims, holes, uv, faces, solid, at, lower, aOff, bOff,
            V: uv.length, F: faces.length };
 }
 
