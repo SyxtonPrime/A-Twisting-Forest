@@ -127,9 +127,9 @@ that it really does cross each cylinder.
 There is a second page, `lab.html`, which is a bench rather than a game. It has
 one thing on it: a rectangle rolling up into a torus, with a scrubber, so the
 roll can be got right on the simplest case there is before it is asked to do
-anything harder. The plan is to build the pieces up from here -- pentagon into
+anything harder. The plan is to build the pieces up from here — pentagon into
 a torus with a disc gone, hexagon into one with two, rectangles into the
-cylinders between -- and only move the result back into `chain.js` once each
+cylinders between — and only move the result back into `chain.js` once each
 piece is worth watching.
 
 The net is a rectangle `2piR` by `2pir`, with both pairs of opposite edges to
