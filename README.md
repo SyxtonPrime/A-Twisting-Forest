@@ -232,12 +232,31 @@ than two faces, orientable when plain and not when twisted, every glued pair
 landing on the same point, and every vertex the right distance from the ring's
 core circle.
 
-## What is not joined up yet
+## The assembly
 
-The handle unit exists and is verified. What is left is assembly: laying the
-cut piece out as an actual pentagon rather than as a slit square, which is a
-Tutte embedding with the boundary pinned to the pentagon, and then joining the
-units with cylinders and running the whole chain into the solid.
+`src/chain.js` puts the handles in a row with a cylinder between each pair, as
+one mesh that is both the net and the solid. Because a rim is an unbroken arc
+of a cut piece's boundary rather than a circle in the middle of it, a cylinder
+can sit against it edge to edge and the whole chain lies down flat in one
+piece.
+
+Laying a handle out is Tutte's embedding: pin its boundary to a convex polygon
+and let every other vertex settle at the average of its neighbours. A square
+for a lone handle, a pentagon for an end of the chain, a hexagon for a middle,
+with the rims pinned to whole sides. Convex is the one thing Tutte asks for,
+and it is what makes the result a drawing rather than a knot: it cannot fold
+over, so there is nothing to check afterwards.
+
+The rest is bookkeeping. Each handle's grid is turned before it is wrapped, so
+its rim lands on the outer equator facing the piece it joins. The cylinders are
+ruled between the two rims they connect, and the far rim runs the other way
+round so the two agree about which side is out.
+
+The tests check the assembled chain the same way as everything else: Euler
+characteristic `2 − 2n`, no free edges anywhere, every edge bordering exactly
+two faces, one twist anywhere making the whole thing one-sided, the net lying
+flat in the plane and wider than it is tall, and every glued pair meeting once
+it is rolled up.
 
 ## Where this is going
 
@@ -267,8 +286,8 @@ later, and the smoothing pass is chosen to preserve it.
   stitched tube between each pair.
 - `src/handle.js` — one handle of the chain in both its forms at once: the cut
   piece, its gluings, and where each of its points sits on the torus.
-- `src/chainnet.js` — the net as one connected piece: pentagons, hexagons and
-  the rectangles between them, with the gluing lettered and arrowed.
+- `src/chain.js` — the handles in a row with the cylinders between them, laid
+  out flat by Tutte's embedding and rolled up by interpolation.
 - `src/net.js` — the same world cut into separate flat pieces instead, each
   vertex holding both where it lies flat and where it lies on the solid, which
   is what lets one run into the other.

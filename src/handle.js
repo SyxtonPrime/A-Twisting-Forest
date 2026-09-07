@@ -33,75 +33,86 @@
 
 const TAU = Math.PI * 2;
 
+// `rims` is how many discs to take out: none for a lone handle, one for an end
+// of the chain, two for a middle. Each gets its own slit, run out to the left
+// edge along its own row, so every rim ends up as one unbroken arc of the
+// boundary.
 export function buildHandle(opts = {}) {
   const nu = opts.nu || 24;                 // round the tube
-  const nv = opts.nv || 16;                 // round the ring
-  const R = opts.R || 1.7;                  // ring radius
-  const r = opts.r || 0.62;                 // tube radius
-  const hu = opts.hu || 5, hv = opts.hv || 5;   // the hole, in cells
-  const u0 = opts.u0 !== undefined ? opts.u0 : Math.round(nu / 2) - Math.floor(hu / 2);
-  const v0 = opts.v0 !== undefined ? opts.v0 : Math.round(nv / 2) - Math.floor(hv / 2);
+  const nv = opts.nv || 20;                 // round the ring
+  const R = opts.R || 1.75;                 // ring radius
+  const r = opts.r || 0.6;                  // tube radius
+  const hu = opts.hu || 4, hv = opts.hv || 4;   // each hole, in cells
+  const rims = opts.rims === undefined ? 1 : opts.rims;
+  const u0 = opts.u0 !== undefined ? opts.u0 : Math.round(nu / 2);
 
-  // Vertices of the cut square: u and v both run one past the end, so the far
-  // edge is a separate copy of the near one and can be glued to it.
+  // Holes sit a row up from the bottom, so the slit comes out one cell short
+  // of the corner and the piece reads as a pentagon with a tab rather than as
+  // something with a long side torn in half.
+  const holes = [];
+  if (rims >= 1) holes.push({ u0, v0: 1 });
+  if (rims >= 2) holes.push({ u0, v0: Math.round(nv / 2) + 1 });
+
+  const slitRow = new Map(holes.map(h => [h.v0, h]));
+  const inHole = (u, v) => holes.some(h => u > h.u0 && u < h.u0 + hu && v > h.v0 && v < h.v0 + hv);
+
   const id = new Int32Array((nu + 1) * (nv + 1)).fill(-1);
   const uv = [];
-  const at = (u, v) => id[v * (nu + 1) + u];
-  const inHole = (u, v) => u > u0 && u < u0 + hu && v > v0 && v < v0 + hv;
+  const at = (u, v) => (u < 0 || v < 0 || u > nu || v > nv) ? -1 : id[v * (nu + 1) + u];
   for (let v = 0; v <= nv; v++) {
     for (let u = 0; u <= nu; u++) {
-      if (inHole(u, v)) continue;           // the hole's inside is not there
+      if (inHole(u, v)) continue;
       id[v * (nu + 1) + u] = uv.length;
-      uv.push([u, v, 0]);                   // 0: an original, not a slit copy
+      uv.push([u, v, -1]);                  // -1: an original, not a slit copy
     }
   }
-
-  // The slit: along v = v0, from the hole's left edge out to u = 0. The
-  // vertices on it get a second copy, and the faces below the slit use it, so
-  // the two lips can come apart.
-  const vs = v0;
-  const lower = new Map();
-  for (let u = 0; u <= u0; u++) {
-    lower.set(u, uv.length);
-    uv.push([u, vs, 1]);                    // 1: the lower lip
-  }
-  const onSlit = (u, v) => v === vs && u <= u0;
+  // the lower lip of each slit
+  const lower = new Map();                  // "u,v" -> vertex
+  holes.forEach((h, hi) => {
+    for (let u = 0; u <= h.u0; u++) {
+      lower.set(u + ',' + h.v0, uv.length);
+      uv.push([u, h.v0, hi]);
+    }
+  });
 
   const faces = [];
   for (let v = 0; v < nv; v++) {
     for (let u = 0; u < nu; u++) {
       const cell = [[u, v], [u + 1, v], [u + 1, v + 1], [u, v + 1]];
-      if (cell.every(([cu, cv]) => inHole(cu, cv) ||
-          (cu > u0 && cu < u0 + hu && cv > v0 && cv < v0 + hv))) continue;
-      // a cell inside the hole has all four corners missing
       if (cell.some(([cu, cv]) => at(cu, cv) < 0)) continue;
-      const below = v < vs;                 // faces under the slit use the copy
-      const q = cell.map(([cu, cv]) =>
-        (below && onSlit(cu, cv)) ? lower.get(cu) : at(cu, cv));
+      const q = cell.map(([cu, cv]) => {
+        // a face is below a slit exactly when the slit is its upper row
+        const h = slitRow.get(cv);
+        const use = h && cv === v + 1 && cu <= h.u0 ? lower.get(cu + ',' + cv) : undefined;
+        return use === undefined ? at(cu, cv) : use;
+      });
       faces.push(q);
     }
   }
 
-  // Where each vertex sits on the torus. The u angle goes round the tube, the
-  // v angle round the ring, and a duplicate lands on its original.
+  // Turn the grid before wrapping it so a hole lands where it is wanted on the
+  // torus: on the outer equator, facing the piece it will be joined to.
+  const aOff = opts.aOff === undefined ? -(u0 + hu / 2) : opts.aOff;
+  const bOff = opts.bOff === undefined ? -(holes.length ? holes[0].v0 + hv / 2 : 0) : opts.bOff;
   const solid = new Float32Array(uv.length * 3);
   for (let i = 0; i < uv.length; i++) {
-    const a = (uv[i][0] % nu) * TAU / nu;
-    const b = (uv[i][1] % nv) * TAU / nv;
+    const a = (((uv[i][0] + aOff) % nu) + nu) % nu * TAU / nu;
+    const b = (((uv[i][1] + bOff) % nv) + nv) % nv * TAU / nv;
     const rad = R + r * Math.cos(a);
     solid[i * 3] = rad * Math.cos(b);
     solid[i * 3 + 1] = r * Math.sin(a);
     solid[i * 3 + 2] = rad * Math.sin(b);
   }
 
-  return { nu, nv, hu, hv, u0, v0, vs, uv, faces, solid, at, lower, V: uv.length, F: faces.length };
+  return { nu, nv, hu, hv, R, r, rims, holes, uv, faces, solid, at, lower,
+           V: uv.length, F: faces.length };
 }
 
-// Which vertices are glued to which, once it is rolled up: the far edges back
-// to the near ones, and the two lips of the slit back together.
+// Which vertices are glued to which once it is rolled up: the far edges back
+// to the near ones, and each slit's two lips back together.
 export function handleGluings(h, twisted) {
   const out = [];
-  const { nu, nv, at, lower, u0, vs } = h;
+  const { nu, nv, at, lower, holes } = h;
   for (let v = 0; v <= nv; v++) {
     const a = at(0, v), b = at(nu, v);
     if (a >= 0 && b >= 0) out.push([a, b]);
@@ -112,9 +123,11 @@ export function handleGluings(h, twisted) {
     const a = at(u, 0), b = at(twisted ? (nu - u) : u, nv);
     if (a >= 0 && b >= 0) out.push([a, b]);
   }
-  for (let u = 0; u <= u0; u++) {
-    const a = at(u, vs), b = lower.get(u);
-    if (a >= 0 && b !== undefined) out.push([a, b]);
+  for (const hole of holes) {
+    for (let u = 0; u <= hole.u0; u++) {
+      const a = at(u, hole.v0), b = lower.get(u + ',' + hole.v0);
+      if (a >= 0 && b !== undefined) out.push([a, b]);
+    }
   }
   return out;
 }
@@ -151,4 +164,20 @@ export function boundaryLoop(h) {
     loop.push(next); seen.add(next); cur = next;
   }
   return loop;
+}
+
+// The rim of one hole, walked once, as it appears in the cut piece: an arc
+// that starts on the lower lip of the slit and ends on the upper one. Those
+// two ends become the same point when it is rolled up, which is when the arc
+// closes into a circle.
+export function rimArc(h, which = 0) {
+  const hole = h.holes[which];
+  if (!hole) return [];
+  const { u0, v0 } = hole, { hu, hv, at, lower } = h;
+  const arc = [lower.get(u0 + ',' + v0)];
+  for (let u = u0 + 1; u <= u0 + hu; u++) arc.push(at(u, v0));
+  for (let v = v0 + 1; v <= v0 + hv; v++) arc.push(at(u0 + hu, v));
+  for (let u = u0 + hu - 1; u >= u0; u--) arc.push(at(u, v0 + hv));
+  for (let v = v0 + hv - 1; v >= v0; v--) arc.push(at(u0, v));
+  return arc;
 }

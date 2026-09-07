@@ -52,10 +52,10 @@ button:hover .key, button:active .key { color: var(--paper); }
   grid-template-columns: minmax(0, 1fr) 380px; align-items: center; gap: 32px;
   padding: 32px; overflow: auto; }
 #stage { position: relative; display: grid; place-items: center; min-width: 0; }
-#worldmap, #chainnet, #solid { display: block; margin: 0 auto; max-width: 100%;
+#worldmap, #netsolid, #solid { display: block; margin: 0 auto; max-width: 100%;
   grid-area: 1 / 1; }
-#solid { touch-action: none; cursor: grab; }
-#solid:active { cursor: grabbing; }
+#solid, #netsolid { touch-action: none; cursor: grab; }
+#solid:active, #netsolid:active { cursor: grabbing; }
 #stage-hint { grid-area: 2 / 1; margin: 10px 0 0; color: var(--faint); text-align: center; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 #reveal { animation: fade-in .9s ease both; }

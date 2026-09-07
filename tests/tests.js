@@ -4,6 +4,7 @@ import { World } from '../src/world.js';
 import { buildMesh } from '../src/mesh.js';
 import { buildHandlebody } from '../src/handlebody.js';
 import { buildHandle, handleGluings, boundaryLoop } from '../src/handle.js';
+import { buildChain, chainGluings } from '../src/chain.js';
 import { mulberry32 } from '../src/rng.js';
 
 const results = [];
@@ -726,9 +727,10 @@ test('handle: the rim is one unbroken arc of the cut piece, which is the point',
   ok(loop.length > 0, 'the cut piece has a boundary');
   // the rim's vertices are the ones ringing the hole, and they must sit
   // together along the walk rather than being scattered through it
+  const hole = h.holes[0];
   const isRim = v => {
     const [u, w] = h.uv[v];
-    return u >= h.u0 && u <= h.u0 + h.hu && w >= h.v0 && w <= h.v0 + h.hv;
+    return u >= hole.u0 && u <= hole.u0 + h.hu && w >= hole.v0 && w <= hole.v0 + h.hv;
   };
   const flags = loop.map(isRim);
   let runs = 0;
@@ -755,11 +757,101 @@ test('handle: rolling it up puts every glued pair at the same point', () => {
   }
   // and the piece really is a torus of revolution: every point the right
   // distance from the ring's core circle
-  const R = 1.7, r = 0.62;
+  const R = h.R, r = h.r;
   for (let i = 0; i < h.V; i++) {
     const x = h.solid[i * 3], y = h.solid[i * 3 + 1], z = h.solid[i * 3 + 2];
     const d = Math.hypot(Math.hypot(x, z) - R, y);
     ok(Math.abs(d - r) < 1e-4, `vertex ${i} is ${d.toFixed(4)} from the core, not ${r}`);
+  }
+});
+
+test('handle: one rim, two rims, or none at all', () => {
+  for (const rims of [0, 1, 2]) {
+    for (const twisted of [false, true]) {
+      const h = buildHandle({ rims });
+      const r = glueUp(h, twisted);
+      eq(r.chi, -rims, `${rims} rims, ${twisted ? 'twisted' : 'plain'}: chi`);
+      eq(r.cycles, rims, `${rims} rims: that many boundary circles`);
+      eq(r.orientable, !twisted, `${rims} rims: orientability follows the twist`);
+      eq(r.maxShare, 2, `${rims} rims: still a surface`);
+    }
+  }
+});
+
+test('chain: handles in a row glue up into the surface the loops asked for', () => {
+  const cases = [[false], [true], [false, false], [false, true], [true, true],
+                 [false, false, false], [false, true, false]];
+  for (const twists of cases) {
+    const plan = twists.map(t => ({ twisted: t }));
+    const c = buildChain(plan);
+    const label = twists.map(t => (t ? 'T' : 'h')).join('');
+    const n = twists.length, tw = twists.filter(Boolean).length;
+
+    const parent = [...Array(c.V).keys()];
+    const find = a => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+    for (const [a, b] of chainGluings(c)) { const x = find(a), y = find(b); if (x !== y) parent[x] = y; }
+    const key = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+    const use = new Map(), dir = new Map();
+    for (let f = 0; f < c.F; f++) {
+      for (let i = 0; i < 4; i++) {
+        const a = find(c.faces[f * 4 + i]), b = find(c.faces[f * 4 + (i + 1) % 4]);
+        if (a === b) continue;
+        const k = key(a, b);
+        use.set(k, (use.get(k) || 0) + 1);
+        if (!dir.has(k)) dir.set(k, []);
+        dir.get(k).push([f, a < b ? 1 : -1]);
+      }
+    }
+    const V = new Set([...Array(c.V).keys()].map(find)).size;
+    eq(V - use.size + c.F, 2 - 2 * n, `${label}: chi`);
+    eq([...use.values()].filter(x => x === 1).length, 0, `${label}: closed, no free edges`);
+    eq(Math.max(...use.values()), 2, `${label}: every edge borders exactly two faces`);
+
+    const nbr = new Map();
+    for (const [, l] of dir) if (l.length === 2) {
+      const [[f, df], [g, dg]] = l;
+      if (!nbr.has(f)) nbr.set(f, []);
+      if (!nbr.has(g)) nbr.set(g, []);
+      nbr.get(f).push([g, df === dg]); nbr.get(g).push([f, df === dg]);
+    }
+    const sign = new Int8Array(c.F), done = new Uint8Array(c.F);
+    let orientable = true;
+    for (let s0 = 0; s0 < c.F; s0++) {
+      if (done[s0]) continue;
+      sign[s0] = 1; done[s0] = 1; const st = [s0];
+      while (st.length) {
+        const f = st.pop();
+        for (const [g, flip] of (nbr.get(f) || [])) {
+          const want = flip ? -sign[f] : sign[f];
+          if (!done[g]) { sign[g] = want; done[g] = 1; st.push(g); }
+          else if (sign[g] !== want) orientable = false;
+        }
+      }
+    }
+    eq(orientable, tw === 0, `${label}: one twist makes it one-sided`);
+  }
+});
+
+test('chain: the net lies flat, and rolling it up moves every point somewhere', () => {
+  const c = buildChain([{ twisted: false }, { twisted: false }]);
+  for (let i = 0; i < c.V; i++) {
+    eq(c.flat[i * 3 + 2], 0, `vertex ${i} of the net is off the page`);
+    ok(Number.isFinite(c.flat[i * 3]) && Number.isFinite(c.flat[i * 3 + 1]),
+      `vertex ${i} of the net has no place`);
+  }
+  // the net is wider than it is tall, being a row of pieces
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < c.V; i++) {
+    x0 = Math.min(x0, c.flat[i * 3]); x1 = Math.max(x1, c.flat[i * 3]);
+    y0 = Math.min(y0, c.flat[i * 3 + 1]); y1 = Math.max(y1, c.flat[i * 3 + 1]);
+  }
+  ok(x1 - x0 > y1 - y0, 'a chain of two lies wider than it is tall');
+  // and every glued pair meets once it is rolled up
+  for (const [a, b] of chainGluings(c)) {
+    const d = Math.hypot(c.positions[a * 3] - c.positions[b * 3],
+                         c.positions[a * 3 + 1] - c.positions[b * 3 + 1],
+                         c.positions[a * 3 + 2] - c.positions[b * 3 + 2]);
+    ok(d < 1e-3, `glued pair ${a},${b} is ${d.toFixed(4)} apart when rolled up`);
   }
 });
 
