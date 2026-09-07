@@ -201,6 +201,44 @@ sheet, the neck has nowhere flat left to be attached, so it lifts off the page
 and arches under. That is not a cheat being covered up — it is the difference
 between the two drawings, made visible.
 
+### Making it look like one thing
+
+Four things, none of which change what the surface is.
+
+**The hole is a disc.** It is cut out of a grid, so it starts life a rectangle
+of cells. Its rim is moved onto a circle and the grid eased out to a few hole
+widths around it, placing each rim vertex by how far it is round the
+rectangle's perimeter rather than by which way it lies from the centre — going
+by direction bunches them at the corners. The easing is clamped so it never
+reaches the edges of the sheet, since those are glued to each other and moving
+one side by an amount the other is not opens the surface along the seam.
+
+**The coloured edges go.** An edge is coloured because it is going to be glued
+to another one, so once it has been there is nothing left to say. Each pair
+fades over the end of the act that closes it, leaving the plain grid line that
+was under it, and the finished surface has no seams drawn on it at all.
+
+**The joins are smoothed.** Three pieces sewn together meet at hard corners,
+and a hard corner is what makes an assembled thing read as an assembly. A few
+rounds of Taubin smoothing — Taubin rather than plain Laplacian, which shrinks
+whatever it touches — are seeded at the two joins and die away four cells into
+each piece. It runs on the quotient, so glued vertices are one vertex and the
+cut mesh is not pulled apart along its seams, and it is weighted to nothing
+everywhere else, so the grid stays crisp and the seams that have not closed yet
+are never averaged across.
+
+**The grid looks like a grid.** Three things were wringing it round. The
+pentagon was regular, as tall as it is wide, while the sheet it stands for is
+three times longer than it is deep; it is now stretched to the sheet's own
+proportions, area kept. The two lips of the slit were being given a fair share
+of the pentagon's perimeter by arc length, but in the developed sheet the slit
+has no width at all, so a sliver of nothing had to fill a large piece of the
+drawing; they are pinned close to the ends of the rim instead. And a grid line
+crossing the slit's mouth meets two vertices there, not one — the two lips,
+which are the same point of the surface but are yards apart in the flat drawing
+— so drawing straight through put a line clean across the piece that was not an
+edge of anything.
+
 The right-hand handle is built as a **mirror image** of the left, not as a copy
 turned round, and that is what makes the neck a rectangle.
 
@@ -266,6 +304,8 @@ later, and the smoothing pass is chosen to preserve it.
   two drawings of the same grid, the flat morph between them, and Tutte's
   embedding for the pentagon.
 - `src/roll/chain.js` — two handles and the neck between them, as one mesh.
+- `src/roll/smooth.js` — the smoothing pass: Taubin, on the quotient, weighted
+  to nothing away from the joins.
 - `src/roll/lab.js` — the workshop page: the specimens, timeline, camera, and
   the framing that keeps a long thin net and a fat torus both filling the frame.
 

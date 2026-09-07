@@ -91,10 +91,12 @@ export function sheetOverlay(sheet, opts = {}) {
 
   const row = j => { const ids = []; for (let i = 0; i <= nx; i++) ids.push(id(i, j)); return ids; };
   const col = i => { const ids = []; for (let j = 0; j <= ny; j++) ids.push(id(i, j)); return ids; };
-  edges.push({ ids: row(0), rgb: PAIR_A, wide: true, kind: 'edge' });
-  edges.push({ ids: row(ny), rgb: PAIR_A, wide: true, kind: 'edge' });
-  edges.push({ ids: col(0), rgb: PAIR_B, wide: true, kind: 'edge' });
-  edges.push({ ids: col(nx), rgb: PAIR_B, wide: true, kind: 'edge' });
+  // `glue` is the act that closes each pair up, so the colour can be let go of
+  // once the edge it marked has stopped being an edge
+  edges.push({ ids: row(0), rgb: PAIR_A, wide: true, kind: 'edge', glue: 'curl' });
+  edges.push({ ids: row(ny), rgb: PAIR_A, wide: true, kind: 'edge', glue: 'curl' });
+  edges.push({ ids: col(0), rgb: PAIR_B, wide: true, kind: 'edge', glue: 'ring' });
+  edges.push({ ids: col(nx), rgb: PAIR_B, wide: true, kind: 'edge', glue: 'ring' });
 
   return { grid, edges };
 }

@@ -25,7 +25,8 @@
 // lands on cut, and the neck runs straight in both drawings.
 
 import { buildPiece, piecePositions, pieceOverlay, RIM } from './piece.js';
-import { rimArc } from '../handle.js';
+import { rimArc, handleGluings } from '../handle.js';
+import { makeSmoother } from './smooth.js';
 import { phaseAt, THREE_ACT } from './roll.js';
 
 const GRID = [173, 165, 148];
@@ -56,10 +57,9 @@ export function buildChain(opts = {}) {
   // reads as a rectangle rather than as a join; developed, far enough that two
   // sheets each 2piR long do not overlap, which is the widest the net ever is;
   // rolled, close enough that the neck is a neck.
-  const rad = pieces[0].pentRad;
-  const apothem = rad * Math.cos(Math.PI / 5);
-  const side = 2 * rad * Math.sin(Math.PI / 5);   // the rim side of the pentagon
-  const gap = side * 1.15;
+  const apothem = pieces[0].apothem;
+  const side = pieces[0].rimSide;                 // the rim side of the pentagon
+  const gap = side * 1.6;
   const APART = { flat: (gap + 2 * apothem) / 2, dev: Math.PI * R + 3, solid: R + r + 1.7 };
   // and enough cells along the neck that its grid comes out square, since a
   // long thin cell is what makes a rectangle look like something else
@@ -103,8 +103,21 @@ export function buildChain(opts = {}) {
     for (let c = 0; c < 3; c++) { rgb[k * 3 + c] = FRONT[c]; backRGB[k * 3 + c] = BACK[c]; }
   }
 
-  return { pieces, offset, cols, m, V, F, faces: fa, rgb, backRGB, seam: [], APART,
-           plan: THREE_ACT, R, r, scratch: pieces.map(p => new Float32Array(p.V * 3)) };
+  const mesh = { pieces, offset, cols, m, V, F, faces: fa, rgb, backRGB, seam: [], APART,
+                 plan: THREE_ACT, R, r, scratch: pieces.map(p => new Float32Array(p.V * 3)) };
+
+  // Where three pieces are sewn together they meet at a hard corner, and a
+  // hard corner is what makes the finished thing read as three pieces rather
+  // than as one surface. The smoothing is seeded at the two joins and dies
+  // away a few cells into each piece, so nothing else is touched, and it is
+  // told about the gluings so it works on the closed surface rather than
+  // pulling the cut mesh apart along every seam.
+  const merge = [];
+  pieces.forEach((p, i) => {
+    for (const [x, y] of handleGluings(p.h, false)) merge.push([x + offset[i], y + offset[i]]);
+  });
+  mesh.smooth = makeSmoother(mesh, { merge, seeds: [...a, ...b], reach: 4 });
+  return mesh;
 }
 
 export function chainPositions(chain, t, opts = {}, out) {
@@ -142,6 +155,8 @@ export function chainPositions(chain, t, opts = {}, out) {
       pos[C + 2] = pos[A + 2] + (pos[B + 2] - pos[A + 2]) * f + dip;
     }
   }
+  // and once the handles have closed up, take the crease out of the two joins
+  chain.smooth(pos, ring);
   return pos;
 }
 
@@ -154,8 +169,11 @@ export function chainOverlay(chain, opts = {}) {
     for (const path of over.edges) edges.push({ ...path, ids: path.ids.map(v => v + o) });
   });
   // the neck, ruled the long way and the short way
+  // as many rings drawn round the neck as the handles have lines across them,
+  // so the two grids read as the same grid
   const { cols, m } = chain;
-  for (let s = 1; s < cols.length - 1; s += 2) grid.push({ ids: cols[s], rgb: GRID, kind: 'grid' });
+  const ring = Math.max(2, Math.round((cols.length - 1) / 6));
+  for (let s = ring; s < cols.length - 1; s += ring) grid.push({ ids: cols[s], rgb: GRID, kind: 'grid' });
   for (let k = 0; k < m; k += Math.max(1, Math.round(m / 8))) {
     grid.push({ ids: cols.map(c => c[k]), rgb: GRID, kind: 'grid' });
   }

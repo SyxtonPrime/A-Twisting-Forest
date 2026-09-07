@@ -171,12 +171,36 @@ function apply() {
   // travel most of that distance in the last act
   smoothR = smoothR === null ? rad : smoothR + (rad - smoothR) * 0.14;
   solid.radiusOverride = smoothR;
-  solid.overlay = [].concat(state.grid ? spec.over.grid : [], state.edges ? spec.over.edges : []);
+  solid.overlay = overlay(p);
   $('t').value = String(state.t);
   $('roll-act').textContent = actName(state.t, p, rests());
   $('t-out').textContent = state.t.toFixed(2);
   $('play').textContent = state.playing ? 'pause' : state.t >= 1 ? 'lay it flat' : 'roll it up';
 }
+
+// An edge is coloured because it is going to be glued to another one, so once
+// it has been there is nothing left to say and the colour goes. Each pair
+// fades out over the end of the act that closes it, leaving the plain grid
+// line that was under it, so the finished surface has no seams drawn on it.
+const GRID_RGB = [173, 165, 148];
+function overlay(p) {
+  const out = state.grid ? spec.over.grid.slice() : [];
+  if (!state.edges) return out;
+  const ph = phaseAt(state.t, p);
+  for (const path of spec.over.edges) {
+    const done = path.glue ? ph[path.glue] : 0;
+    const a = 1 - smoothstep((done - 0.8) / 0.2);
+    if (a < 0.02) continue;
+    out.push(a > 0.995 ? path : {
+      ...path,
+      wide: a > 0.4,
+      rgb: path.rgb.map((c, i) => Math.round(GRID_RGB[i] + (c - GRID_RGB[i]) * a)),
+    });
+  }
+  return out;
+}
+
+const smoothstep = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 
 // The roll is anchored at the middle of the sheet, and the finished torus ends
 // up sitting a good way off the origin; without this it wanders out of frame

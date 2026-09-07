@@ -72,9 +72,20 @@ export function buildPiece(opts = {}) {
   const V = h.V;
   const dev = new Float32Array(V * 2);
   for (let i = 0; i < V; i++) {
-    dev[i * 2] = mx * (h.uv[i][1] / nv - 0.5) * 2 * Math.PI * R;
+    dev[i * 2] = (h.uv[i][1] / nv - 0.5) * 2 * Math.PI * R;
     dev[i * 2 + 1] = (h.uv[i][0] / nu - 0.5) * 2 * Math.PI * r;
   }
+  // The hole is cut out of a grid, so it starts life a rectangle of cells. A
+  // disc is what is meant to have been taken out, so the rim is moved onto a
+  // circle and the grid around it eased to suit. Done before the reflection,
+  // so the two handles of a chain agree about it exactly.
+  roundTheHole(dev, V, {
+    cx: ((v0 + hv / 2) / nv - 0.5) * 2 * Math.PI * R,
+    cy: ((u0 + hu / 2) / nu - 0.5) * 2 * Math.PI * r,
+    a: (hv / nv) * Math.PI * R, b: (hu / nu) * Math.PI * r,
+    halfX: Math.PI * R, halfY: Math.PI * r,
+  });
+  if (mirror) for (let i = 0; i < V; i++) dev[i * 2] = -dev[i * 2];
 
   // ---- the faces --------------------------------------------------------
   // The grid is built in (u, v) and drawn in (x, y) = (f(v), g(u)), and
@@ -95,10 +106,13 @@ export function buildPiece(opts = {}) {
   }
 
   const rim = rimArc(h, 0);
-  const { xy: pent, rad: pentRad } = pentagonLayout(h, rim, R, r, mx);
+  const flat = pentagonLayout(h, rim, R, r, mx, opts.aspect === undefined
+    ? Math.sqrt(R / r) : opts.aspect);
 
   return { h, nu, nv, hu, hv, R, r, V, F, faces, rgb, backRGB, seam: [],
-           dev, pent, pentRad, rim, mirror, plan: THREE_ACT, side: -1 };
+           dev, pent: flat.xy, apothem: flat.apothem, rimSide: flat.rimSide,
+           corners: flat.corners,
+           rim, mirror, plan: THREE_ACT, side: -1 };
 }
 
 // Where every vertex is at time t: the flat drawing interpolated by act zero,
@@ -123,6 +137,41 @@ export function piecePositions(piece, t, opts = {}, out) {
   return pos;
 }
 
+// Move the hole's rim onto a circle, and ease the grid out to a few hole
+// widths away so nothing kinks. A point is placed by how far it is round the
+// rectangle's perimeter rather than by which way it lies from the centre: the
+// rim walks the perimeter in equal steps, so going by perimeter puts its
+// vertices evenly round the circle, and going by direction would bunch them at
+// the corners.
+function roundTheHole(dev, V, { cx, cy, a, b, halfX, halfY }) {
+  const rho = Math.sqrt(a * b) * 1.04;
+  // The easing must not reach the edges of the sheet. Those edges are glued to
+  // each other, and a vertex on one side moved by an amount the vertex on the
+  // other side is not opens the surface along the seam when it closes up.
+  const room = Math.min((halfY - Math.abs(cy)) / b, (halfX - Math.abs(cx)) / a) * 0.95;
+  const OUT = Math.min(3.2, room);
+  if (OUT < 1.3) return;                     // no room to ease it: leave it square
+  const P = 4 * (a + b);
+  const phase = Math.atan2(-b, a);           // so the walk starts where it starts
+  for (let i = 0; i < V; i++) {
+    const dx = dev[i * 2] - cx, dy = dev[i * 2 + 1] - cy;
+    const t = Math.max(Math.abs(dx) / a, Math.abs(dy) / b);
+    if (t < 1e-9 || t >= OUT) continue;
+    const qx = dx / t, qy = dy / t;          // where the ray leaves the rectangle
+    let d;
+    if (qx >= a - 1e-9) d = qy + b;                            // right, upwards
+    else if (qy >= b - 1e-9) d = 2 * b + (a - qx);             // top, leftwards
+    else if (qx <= -a + 1e-9) d = 2 * b + 2 * a + (b - qy);    // left, downwards
+    else d = 4 * b + 2 * a + (qx + a);                         // bottom, rightwards
+    const ang = phase + (2 * Math.PI * d) / P;
+    const e = t <= 1 ? 1 : 1 - smoothstep((t - 1) / (OUT - 1));
+    dev[i * 2] += (rho * Math.cos(ang) - qx) * e;
+    dev[i * 2 + 1] += (rho * Math.sin(ang) - qy) * e;
+  }
+}
+
+const smoothstep = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+
 // The grid ruled on the piece, the two pairs of edges that get glued, and the
 // rim, which does not. A line is cut into runs wherever the hole took a vertex
 // out, so nothing is ever drawn straight across the hole.
@@ -133,21 +182,31 @@ export function pieceOverlay(piece, opts = {}) {
   const add = (into, ids, rgb, extra) => {
     for (const run of runs(ids)) if (run.length > 1) into.push({ ids: run, rgb, ...extra });
   };
-  for (let u = 0; u <= nu; u += si) {
-    const ids = []; for (let v = 0; v <= nv; v++) ids.push(h.at(u, v));
-    add(grid, ids, GRID, { kind: 'grid' });
-  }
-  for (let v = 0; v <= nv; v += sj) {
-    const ids = []; for (let u = 0; u <= nu; u++) ids.push(h.at(u, v));
-    add(grid, ids, GRID, { kind: 'grid' });
-  }
-  const col = u => { const ids = []; for (let v = 0; v <= nv; v++) ids.push(h.at(u, v)); return ids; };
+  // A column that crosses the slit meets two vertices at its mouth, not one:
+  // the two lips, which are the same point of the surface but are pinned yards
+  // apart in the flat drawing. Taking either one and carrying straight on
+  // draws a line clean across the piece, from one end of the rim to the other,
+  // that is not an edge of anything. So the column stops at one lip and starts
+  // again at the other.
+  const { u0, v0 } = h.holes[0];
+  const col = u => {
+    const ids = [];
+    for (let v = 0; v <= nv; v++) {
+      if (v === v0 && u <= u0) { ids.push(h.lower.get(u + ',' + v0)); ids.push(-1); }
+      ids.push(h.at(u, v));
+    }
+    return ids;
+  };
   const row = v => { const ids = []; for (let u = 0; u <= nu; u++) ids.push(h.at(u, v)); return ids; };
-  add(edges, col(0), PAIR_A, { wide: true, kind: 'edge' });
-  add(edges, col(nu), PAIR_A, { wide: true, kind: 'edge' });
-  add(edges, row(0), PAIR_B, { wide: true, kind: 'edge' });
-  add(edges, row(nv), PAIR_B, { wide: true, kind: 'edge' });
-  edges.push({ ids: piece.rim, rgb: RIM, wide: true, kind: 'rim' });
+  for (let u = 0; u <= nu; u += si) add(grid, col(u), GRID, { kind: 'grid' });
+  for (let v = 0; v <= nv; v += sj) add(grid, row(v), GRID, { kind: 'grid' });
+  // `glue` is the act that closes each pair up, so the colour can be let go of
+  // once the edge it marked has stopped being an edge
+  add(edges, col(0), PAIR_A, { wide: true, kind: 'edge', glue: 'curl' });
+  add(edges, col(nu), PAIR_A, { wide: true, kind: 'edge', glue: 'curl' });
+  add(edges, row(0), PAIR_B, { wide: true, kind: 'edge', glue: 'ring' });
+  add(edges, row(nv), PAIR_B, { wide: true, kind: 'edge', glue: 'ring' });
+  edges.push({ ids: piece.rim, rgb: RIM, wide: true, kind: 'rim', glue: 'ring' });
   return { grid, edges };
 }
 
@@ -180,15 +239,22 @@ function divisor(n, want) {
 //
 // The pentagon is sized to have about the area of the sheet it will become,
 // so act zero is a change of shape rather than a change of scale.
-function pentagonLayout(h, rim, R, r, mx) {
+function pentagonLayout(h, rim, R, r, mx, aspect) {
   const area = 4 * Math.PI * Math.PI * R * r;
   const rad = Math.sqrt(area / (2.5 * Math.sin(2 * Math.PI / 5)));
+  // A regular pentagon is as tall as it is wide and the sheet it stands for is
+  // three times longer than it is deep, so the map between them has to wring
+  // the grid round in a spiral to make up the difference. Stretching the
+  // pentagon to the sheet's own proportions -- area kept, so it is still the
+  // same amount of paper -- takes most of that out, and the grid comes out
+  // looking like a grid at both ends of the roll.
+  const A = Math.max(1, aspect);
   const P = [];
   for (let i = 0; i < 5; i++) {
     // side 0 is the rim, and it faces +x -- or -x once the whole drawing is
     // reflected, which is what a piece whose neighbour is on its left gets.
     const a = -Math.PI / 5 + (i / 5) * 2 * Math.PI;
-    P.push([mx * Math.cos(a) * rad, Math.sin(a) * rad]);
+    P.push([mx * Math.cos(a) * rad * A, (Math.sin(a) * rad) / A]);
   }
 
   const loop = boundaryLoop(h);
@@ -212,17 +278,61 @@ function pentagonLayout(h, rim, R, r, mx) {
     if (inRim && onRim.has(v)) head.push(v);
     else { inRim = false; tail.push(v); }
   }
-  along([P[0], P[1]], head.length).forEach((pt, i) => pinned.set(head[i], pt));
-  along([P[1], P[2], P[3], P[4], P[0]], tail.length + 2)
-    .slice(1, -1).forEach((pt, i) => pinned.set(tail[i], pt));
+  // The rim takes a whole side. What is left goes round the other four -- but
+  // not by arc length alone, because two stretches of it are the lips of the
+  // slit, and in the developed sheet the slit has no width at all. Give those
+  // lips a fair share of the pentagon's perimeter and a sliver of nothing has
+  // to fill a large piece of the drawing, which is where all the crowding and
+  // swirling in the grid came from. Pinned close to the ends of the rim
+  // instead, the slit stays a slit, and the rest of the sheet gets the room.
+  const { u0, v0 } = h.holes[0];
+  const isSlit = v => h.uv[v][1] === v0 && h.uv[v][0] < u0;
+  let lipA = 0, lipB = 0;
+  while (lipA < tail.length && isSlit(tail[lipA])) lipA++;
+  while (lipB < tail.length - lipA && isSlit(tail[tail.length - 1 - lipB])) lipB++;
 
-  return { xy: tutte(h, pinned, 2600), rad };
+  along([P[0], P[1]], head.length).forEach((pt, i) => pinned.set(head[i], pt));
+  const round = [P[1], P[2], P[3], P[4], P[0]];
+  const LIP = 0.04;                          // of the way round, per lip
+  const put = (list, from, to) => {
+    if (!list.length) return;
+    alongRange(round, list.length + 2, from, to).slice(1, -1)
+      .forEach((pt, i) => pinned.set(list[i], pt));
+  };
+  put(tail.slice(0, lipA), 0, LIP);
+  put(tail.slice(lipA, tail.length - lipB), LIP, 1 - LIP);
+  put(tail.slice(tail.length - lipB), 1 - LIP, 1);
+
+  return { xy: tutte(h, pinned, 2600), corners: P,
+           apothem: Math.cos(Math.PI / 5) * rad * A,
+           rimSide: (2 * Math.sin(Math.PI / 5) * rad) / A };
 }
 
 // Every vertex of the boundary, for the tests: the drawing is only a drawing
 // if all of them are pinned, and a stray one gets dragged into the middle.
 export function boundaryOf(piece) {
   return boundaryLoop(piece.h);
+}
+
+// `count` points spread evenly along the stretch of a polyline between two
+// fractions of its length.
+function alongRange(pts, count, t0, t1) {
+  const seg = [];
+  let total = 0;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const d = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+    seg.push(d); total += d;
+  }
+  const out = [];
+  for (let n = 0; n < count; n++) {
+    const f = t0 + (t1 - t0) * (count === 1 ? 0.5 : n / (count - 1));
+    let want = f * total, i = 0;
+    while (i < seg.length - 1 && want > seg[i]) { want -= seg[i]; i++; }
+    const g = seg[i] ? want / seg[i] : 0;
+    out.push([pts[i][0] + (pts[i + 1][0] - pts[i][0]) * g,
+              pts[i][1] + (pts[i + 1][1] - pts[i][1]) * g]);
+  }
+  return out;
 }
 
 // `count` points spread evenly along a polyline by arc length.

@@ -953,17 +953,44 @@ test('piece: the drawing is a drawing -- every boundary vertex is pinned', () =>
   for (const [k, n] of count) if (n === 1) for (const v of k.split(':')) onBoundary.add(Number(v));
   eq(loop.length, onBoundary.size, 'the walk visits every boundary vertex once');
 
-  // and none of them was left to be dragged into the middle by Tutte: a pinned
-  // vertex sits on the pentagon, so its distance from the centre is the
-  // circumradius times something no smaller than cos(pi/5)
+  // and none of them was left to be dragged into the middle by Tutte: every one
+  // sits on a side of the pentagon it was pinned to
   const flat = piecePositions(PIECE, 0);
-  let far = 0;
-  for (let i = 0; i < PIECE.V; i++) far = Math.max(far, Math.hypot(flat[i * 3], flat[i * 3 + 1]));
-  const apothem = far * Math.cos(Math.PI / 5);
+  const P = PIECE.corners;
   for (const v of loop) {
-    const d = Math.hypot(flat[v * 3], flat[v * 3 + 1]);
-    ok(d > apothem * 0.985, `boundary vertex ${v} is on the rim of the pentagon, not inside it`);
+    const x = flat[v * 3], y = flat[v * 3 + 1];
+    let near = Infinity;
+    for (let i = 0; i < P.length; i++) near = Math.min(near, toSegment(x, y, P[i], P[(i + 1) % P.length]));
+    ok(near < 1e-3, `boundary vertex ${v} is on a side of the pentagon, not inside it: ${near}`);
   }
+});
+
+function toSegment(x, y, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = dx * dx + dy * dy;
+  const t = len ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / len)) : 0;
+  return Math.hypot(x - (a[0] + dx * t), y - (a[1] + dy * t));
+}
+
+test('piece: what gets cut out of the torus is a disc, not a square', () => {
+  const flat = piecePositions(PIECE, 0.36);          // developed
+  // the walk's last vertex is its first one again -- the two lips of the slit --
+  // so it is left out of the average, or the centre comes out pulled towards it
+  const rim = rimArc(PIECE.h, 0);
+  const once = rim.slice(0, -1);
+  let cx = 0, cy = 0;
+  for (const v of once) { cx += flat[v * 3]; cy += flat[v * 3 + 1]; }
+  cx /= once.length; cy /= once.length;
+  let lo = Infinity, hi = 0, gap = 0, prev = null;
+  for (const v of rim) {
+    const d = Math.hypot(flat[v * 3] - cx, flat[v * 3 + 1] - cy);
+    lo = Math.min(lo, d); hi = Math.max(hi, d);
+    if (prev !== null) gap = Math.max(gap, Math.hypot(flat[v * 3] - prev[0], flat[v * 3 + 1] - prev[1]));
+    prev = [flat[v * 3], flat[v * 3 + 1]];
+  }
+  ok(hi / lo < 1.03, `the rim is a circle: radius ${lo.toFixed(3)} to ${hi.toFixed(3)}`);
+  // and its vertices are spread evenly round it, not bunched at the old corners
+  ok(gap < (2 * Math.PI * hi) / (rim.length - 1) * 1.25, `evenly spread: biggest step ${gap.toFixed(3)}`);
 });
 
 test('piece: it lies flat, then rolls up into a torus with one disc gone', () => {
@@ -1086,6 +1113,19 @@ test('pair: flat, the neck is a rectangle and its grid is square', () => {
   const along = Math.abs(flat[far[0] * 3] - flat[near[0] * 3]) / last;
   const across = Math.abs(flat[near[chain.m - 1] * 3 + 1] - flat[near[0] * 3 + 1]) / (chain.m - 1);
   ok(along / across > 0.6 && along / across < 1.7, `cells are squarish: ${(along / across).toFixed(2)}`);
+});
+
+test('pair: smoothing the joins does not pull the surface apart at a seam', () => {
+  const chain = buildRollChain({ nu: 16, nv: 48, hu: 4, hv: 4, R: 3, r: 1 });
+  const up = rollChainPositions(chain, 1);
+  chain.pieces.forEach((p, i) => {
+    const o = chain.offset[i];
+    for (const [x, y] of handleGluings(p.h, false)) {
+      const a = (x + o) * 3, b = (y + o) * 3;
+      const d = Math.hypot(up[a] - up[b], up[a + 1] - up[b + 1], up[a + 2] - up[b + 2]);
+      ok(d < 1e-3, `piece ${i}: glued pair ${x},${y} is still one point after smoothing: ${d}`);
+    }
+  });
 });
 
 // ---- the report ------------------------------------------------------
