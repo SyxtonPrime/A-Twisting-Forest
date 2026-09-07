@@ -107,7 +107,7 @@ export function buildPiece(opts = {}) {
 
   const rim = rimArc(h, 0);
   const flat = pentagonLayout(h, rim, R, r, mx, opts.aspect === undefined
-    ? Math.sqrt(R / r) : opts.aspect);
+    ? 1.2 : opts.aspect, dev);
 
   return { h, nu, nv, hu, hv, R, r, V, F, faces, rgb, backRGB, seam: [],
            dev, pent: flat.xy, apothem: flat.apothem, rimSide: flat.rimSide,
@@ -239,7 +239,7 @@ function divisor(n, want) {
 //
 // The pentagon is sized to have about the area of the sheet it will become,
 // so act zero is a change of shape rather than a change of scale.
-function pentagonLayout(h, rim, R, r, mx, aspect) {
+function pentagonLayout(h, rim, R, r, mx, aspect, dev) {
   const area = 4 * Math.PI * Math.PI * R * r;
   const rad = Math.sqrt(area / (2.5 * Math.sin(2 * Math.PI / 5)));
   // A regular pentagon is as tall as it is wide and the sheet it stands for is
@@ -303,7 +303,10 @@ function pentagonLayout(h, rim, R, r, mx, aspect) {
   put(tail.slice(lipA, tail.length - lipB), LIP, 1 - LIP);
   put(tail.slice(tail.length - lipB), 1 - LIP, 1);
 
-  return { xy: tutte(h, pinned, 2600), corners: P,
+  // Tutte first, because it cannot fold and so is a safe place to start from,
+  // and then relaxed towards the shape of the sheet it stands for.
+  const xy = arap(h, pinned, dev, tutte(h, pinned, 900));
+  return { xy, corners: P,
            apothem: Math.cos(Math.PI / 5) * rad * A,
            rimSide: (2 * Math.sin(Math.PI / 5) * rad) / A };
 }
@@ -377,4 +380,97 @@ function tutte(h, pinned, iters) {
     }
   }
   return xy;
+}
+
+
+// As rigid as possible.
+//
+// Tutte's embedding is a harmonic map, and what it minimises is the Dirichlet
+// energy, which is not the same thing as looking right. A harmonic map from a
+// sheet three times longer than it is deep onto a pentagon has to wring the
+// grid round in a spiral to make up the difference, and the spiral is the
+// waviness. What is actually wanted is the drawing in which each cell is as
+// close as it can be to the cell of the developed sheet it came from: turned
+// and moved, but not sheared and not stretched.
+//
+// So: guess a rotation for each cell, solve for the vertices that best fit
+// those rotations, and repeat. The rotation for a cell is the one that lines
+// its rest shape up with where it has ended up, which in two dimensions is one
+// arctangent rather than a decomposition. Neither step can make the energy
+// worse, so it settles.
+//
+// The distortion does not go away -- the boundary is pinned to a pentagon and
+// the sheet is a rectangle, so something has to give -- but it is spread out
+// as an even shear instead of being piled into a few swirls, and a grid that
+// leans is far easier to read than a grid that curls.
+function arap(h, pinned, rest, init, outer = 26, inner = 8) {
+  const V = h.V, F = h.faces.length;
+  // every cell contributes its four sides and both diagonals: without the
+  // diagonals a quad can shear freely and the rotations have nothing to hold
+  const PAIRS = [[0, 1], [1, 2], [2, 3], [3, 0], [0, 2], [1, 3]];
+  const ex = new Float32Array(F * 6), ey = new Float32Array(F * 6);
+  const deg = new Int32Array(V);
+  for (let f = 0; f < F; f++) {
+    const q = h.faces[f];
+    for (let k = 0; k < 6; k++) {
+      const i = q[PAIRS[k][0]], j = q[PAIRS[k][1]];
+      ex[f * 6 + k] = rest[i * 2] - rest[j * 2];
+      ey[f * 6 + k] = rest[i * 2 + 1] - rest[j * 2 + 1];
+      deg[i]++; deg[j]++;
+    }
+  }
+  const p = Float32Array.from(init);
+  const cs = new Float32Array(F), sn = new Float32Array(F);
+  const accx = new Float32Array(V), accy = new Float32Array(V);
+
+  for (let it = 0; it < outer; it++) {
+    // what turn best carries each rest cell onto where that cell now is
+    for (let f = 0; f < F; f++) {
+      const q = h.faces[f];
+      let a = 0, b = 0;                      // a = S00 + S11, b = S10 - S01
+      for (let k = 0; k < 6; k++) {
+        const i = q[PAIRS[k][0]], j = q[PAIRS[k][1]];
+        const px = p[i * 2] - p[j * 2], py = p[i * 2 + 1] - p[j * 2 + 1];
+        const rx = ex[f * 6 + k], ry = ey[f * 6 + k];
+        a += px * rx + py * ry;
+        b += py * rx - px * ry;
+      }
+      const n = Math.hypot(a, b) || 1;
+      cs[f] = a / n; sn[f] = b / n;
+    }
+    // and then the vertices that best agree with all of those turns at once
+    for (let sweep = 0; sweep < inner; sweep++) {
+      accx.fill(0); accy.fill(0);
+      for (let f = 0; f < F; f++) {
+        const q = h.faces[f], c = cs[f], s2 = sn[f];
+        for (let k = 0; k < 6; k++) {
+          const i = q[PAIRS[k][0]], j = q[PAIRS[k][1]];
+          const rx = ex[f * 6 + k], ry = ey[f * 6 + k];
+          const tx = c * rx - s2 * ry, ty = s2 * rx + c * ry;   // the turned side
+          accx[i] += p[j * 2] + tx; accy[i] += p[j * 2 + 1] + ty;
+          accx[j] += p[i * 2] - tx; accy[j] += p[i * 2 + 1] - ty;
+        }
+      }
+      for (let v = 0; v < V; v++) {
+        if (pinned.has(v) || !deg[v]) continue;
+        p[v * 2] = accx[v] / deg[v]; p[v * 2 + 1] = accy[v] / deg[v];
+      }
+    }
+  }
+  // A fold would be worse than the waviness, so keep the safe answer if the
+  // relaxation has turned any cell inside out. Which way round the cells are is
+  // read off the drawing that was started from, since a reflected piece has all
+  // of them the other way and neither is wrong.
+  const want = Math.sign(area(init, h.faces[0][0], h.faces[0][1], h.faces[0][2])) || 1;
+  for (let f = 0; f < F; f++) {
+    const q = h.faces[f];
+    if (Math.sign(area(p, q[0], q[1], q[2])) !== want) return init;
+    if (Math.sign(area(p, q[0], q[2], q[3])) !== want) return init;
+  }
+  return p;
+}
+
+function area(p, a, b, c) {
+  return (p[b * 2] - p[a * 2]) * (p[c * 2 + 1] - p[a * 2 + 1])
+       - (p[c * 2] - p[a * 2]) * (p[b * 2 + 1] - p[a * 2 + 1]);
 }

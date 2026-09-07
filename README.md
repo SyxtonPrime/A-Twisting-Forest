@@ -227,9 +227,22 @@ cut mesh is not pulled apart along its seams, and it is weighted to nothing
 everywhere else, so the grid stays crisp and the seams that have not closed yet
 are never averaged across.
 
-**The grid looks like a grid.** Three things were wringing it round. The
-pentagon was regular, as tall as it is wide, while the sheet it stands for is
-three times longer than it is deep; it is now stretched to the sheet's own
+**The grid looks like a grid.** Four things were wringing it round. The layout
+was Tutte's embedding, which is a harmonic map, and what a harmonic map
+minimises is the Dirichlet energy — not the same thing as looking right. Going
+from a sheet three times longer than it is deep onto a pentagon, it wrings the
+grid round in a spiral to make up the difference, and the spiral is the
+waviness. What is wanted is the drawing in which each cell is as close as it
+can be to the cell of the developed sheet it came from — turned and moved, but
+not sheared and not stretched — so the layout is now relaxed **as rigid as
+possible** against the developed rectangle, starting from Tutte because Tutte
+cannot fold and so is a safe place to begin. Guess a turn for each cell, solve
+for the vertices that best fit those turns, repeat; in two dimensions the turn
+is one arctangent rather than a decomposition. The distortion does not go away,
+since the boundary is pinned to a pentagon and the sheet is a rectangle, but it
+comes out as an even lean instead of a few swirls, and a grid that leans is far
+easier to read than a grid that curls. The pentagon was also regular, as tall
+as it is wide; it is now stretched a little towards the sheet's own
 proportions, area kept. The two lips of the slit were being given a fair share
 of the pentagon's perimeter by arc length, but in the developed sheet the slit
 has no width at all, so a sliver of nothing had to fill a large piece of the
@@ -306,6 +319,9 @@ later, and the smoothing pass is chosen to preserve it.
 - `src/roll/chain.js` — two handles and the neck between them, as one mesh.
 - `src/roll/smooth.js` — the smoothing pass: Taubin, on the quotient, weighted
   to nothing away from the joins.
+- `tools/bundle-lab.py` — folds the workshop into one self-contained file, for
+  publishing it somewhere a phone can reach. The site itself still has no build
+  step; this is only for that.
 - `src/roll/lab.js` — the workshop page: the specimens, timeline, camera, and
   the framing that keeps a long thin net and a fat torus both filling the frame.
 

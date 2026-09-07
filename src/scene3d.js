@@ -17,6 +17,12 @@ const COLOUR = {
 const SEAM = ['#b5352c', '#2a7f7a', '#c28a1b', '#6a4c9c', '#3b6fb6', '#8a6d3b', '#c2589a', '#4f8a3a'];
 const PAPER_RGB = [244, 239, 230];
 
+// how far apart two pointers are
+function gap(down) {
+  const [a, b] = [...down.values()];
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
 function hexRGB(h) {
   return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 }
@@ -85,19 +91,37 @@ export class Solid {
   bindPointer() {
     const c = this.canvas;
     let last = null;
+    // Two fingers pinch to zoom, which is the only way to zoom on a phone,
+    // since there is no wheel to turn. While there are two down, neither one
+    // turns the piece: a pinch that also spun it would be unusable.
+    const down = new Map();
+    let span = 0;
     c.style.touchAction = 'none';
     c.addEventListener('pointerdown', e => {
-      last = [e.clientX, e.clientY];
+      down.set(e.pointerId, [e.clientX, e.clientY]);
+      last = down.size === 1 ? [e.clientX, e.clientY] : null;
+      span = down.size === 2 ? gap(down) : 0;
       this.autoSpin = false;
       c.setPointerCapture(e.pointerId);
     });
     c.addEventListener('pointermove', e => {
+      if (down.has(e.pointerId)) down.set(e.pointerId, [e.clientX, e.clientY]);
+      if (down.size >= 2) {
+        const now = gap(down);
+        if (span > 4 && now > 4) this.zoom = Math.max(0.45, Math.min(3, this.zoom * (now / span)));
+        span = now;
+        return;
+      }
       if (!last) return;
       this.az += (e.clientX - last[0]) * 0.01;
       this.el = Math.max(-1.5, Math.min(1.5, this.el + (e.clientY - last[1]) * 0.01));
       last = [e.clientX, e.clientY];
     });
-    const stop = () => { last = null; };
+    const stop = e => {
+      down.delete(e.pointerId);
+      last = null; span = 0;
+      if (down.size === 1) last = [...down.values()][0];
+    };
     c.addEventListener('pointerup', stop);
     c.addEventListener('pointercancel', stop);
     c.addEventListener('wheel', e => {
