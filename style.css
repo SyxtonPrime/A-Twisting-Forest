@@ -112,15 +112,17 @@ body.workshop { overflow: hidden; }
   color: var(--faint); }
 #lab-controls .notes p { margin: 0 0 12px; }
 #lab-controls .notes b { font-weight: normal; }
-.pa { color: #2a7f7a; } .pb { color: #b5352c; }
-/* where each act begins, ticked on the scrubber */
+.pa { color: #2a7f7a; } .pb { color: #b5352c; } .pc { color: #c28a1b; }
+#lab-controls .notes i { font-style: normal; text-decoration: overline; }
+/* where each act begins and ends, ticked on the scrubber */
 #marks { position: relative; }
-#marks::before, #marks::after { content: ""; position: absolute; top: -3px;
-  width: 1px; height: 6px; background: var(--rule); }
-#marks::before { left: var(--curl-end, 45%); }
-#marks::after { left: var(--ring-start, 55%); }
+#marks .tick { position: absolute; top: -3px; width: 1px; height: 6px;
+  background: var(--rule); }
 .legend { display: flex; justify-content: space-between; color: var(--faint);
   font-size: 12px; margin-top: 4px; }
+.legend span:only-child { margin: 0 auto; }
+#lab-controls select { font: inherit; width: 100%; background: none; color: var(--ink);
+  border: 1px solid var(--ink); border-radius: 2px; padding: 5px 8px; }
 
 @media (max-width: 900px) {
   body.workshop { overflow: auto; }

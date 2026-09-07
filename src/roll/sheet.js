@@ -43,10 +43,7 @@ export function buildSheet(nx = 56, ny = 28) {
   return { nx, ny, V, F, faces, uv, rgb, backRGB, seam: [], id };
 }
 
-// Where every vertex is at time t. The piece is recentred on what it currently
-// occupies, because the roll is anchored at the middle of the sheet and the
-// finished torus ends up sitting a good way off the origin; without this it
-// wanders out of the frame in the last act.
+// Where every vertex is at time t.
 export function sheetPositions(sheet, t, opts = {}, out) {
   const R = opts.R === undefined ? 3 : opts.R;
   const r = opts.r === undefined ? 1 : opts.r;
@@ -54,18 +51,13 @@ export function sheetPositions(sheet, t, opts = {}, out) {
   const V = sheet.V;
   const pos = out && out.length === V * 3 ? out : new Float32Array(V * 3);
   const p = [0, 0, 0];
-  let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity;
   const halfX = Math.PI * R, halfY = Math.PI * r;
   for (let i = 0; i < V; i++) {
     const x = (sheet.uv[i * 2] * 2 - 1) * halfX;
     const y = (sheet.uv[i * 2 + 1] * 2 - 1) * halfY;
     rollPoint(x, y, R, r, curl, ring, p);
     pos[i * 3] = p[0]; pos[i * 3 + 1] = p[1]; pos[i * 3 + 2] = p[2];
-    if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
-    if (p[2] < minz) minz = p[2]; if (p[2] > maxz) maxz = p[2];
   }
-  const cx = (minx + maxx) / 2, cz = (minz + maxz) / 2;
-  for (let i = 0; i < V; i++) { pos[i * 3] -= cx; pos[i * 3 + 2] -= cz; }
   return pos;
 }
 

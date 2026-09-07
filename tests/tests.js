@@ -7,6 +7,9 @@ import { buildChain, chainGluings, chainOverlay, chainPositions } from '../src/c
 import { mulberry32 } from '../src/rng.js';
 import { rollPoint, phaseAt, CURL_END, RING_START } from '../src/roll/roll.js';
 import { buildSheet, sheetPositions } from '../src/roll/sheet.js';
+import { buildPiece, piecePositions, boundaryOf } from '../src/roll/piece.js';
+import { buildChain as buildRollChain, chainPositions as rollChainPositions } from '../src/roll/chain.js';
+import { rimArc } from '../src/handle.js';
 
 const results = [];
 function test(name, fn) {
@@ -831,11 +834,6 @@ test('chain: the route runs the whole way, across the cylinders as well', () => 
   }
 });
 
-const el = document.getElementById('out');
-const failed = results.filter(r => !r.ok);
-el.textContent = results.map(r => (r.ok ? 'PASS ' : 'FAIL ') + r.name + (r.ok ? '' : '\n  ' + r.err)).join('\n') +
-  `\n\n${results.length - failed.length}/${results.length} passed`;
-document.title = failed.length ? 'FAIL' : 'PASS';
 
 
 // ---- the roll: a rectangle into a torus --------------------------------
@@ -936,3 +934,142 @@ test('roll: the sheet is a proper grid, and every quad keeps its four corners', 
   ok(Math.abs(2 * w - 2 * P * R) < 1e-4, 'the net is 2piR long');
   ok(Math.abs(2 * h - 2 * P * r) < 1e-4, 'the net is 2pir across');
 });
+
+
+// ---- the handle piece: a pentagon into a torus with a disc gone ---------
+
+const PIECE = buildPiece({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1, face: 0.25 });
+
+test('piece: the drawing is a drawing -- every boundary vertex is pinned', () => {
+  const loop = boundaryOf(PIECE);
+  // the boundary walk really is the whole boundary
+  const count = new Map();
+  const key = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+  for (const f of PIECE.h.faces) for (let i = 0; i < 4; i++) {
+    const k = key(f[i], f[(i + 1) % 4]);
+    count.set(k, (count.get(k) || 0) + 1);
+  }
+  const onBoundary = new Set();
+  for (const [k, n] of count) if (n === 1) for (const v of k.split(':')) onBoundary.add(Number(v));
+  eq(loop.length, onBoundary.size, 'the walk visits every boundary vertex once');
+
+  // and none of them was left to be dragged into the middle by Tutte: a pinned
+  // vertex sits on the pentagon, so its distance from the centre is the
+  // circumradius times something no smaller than cos(pi/5)
+  const flat = piecePositions(PIECE, 0);
+  let far = 0;
+  for (let i = 0; i < PIECE.V; i++) far = Math.max(far, Math.hypot(flat[i * 3], flat[i * 3 + 1]));
+  const apothem = far * Math.cos(Math.PI / 5);
+  for (const v of loop) {
+    const d = Math.hypot(flat[v * 3], flat[v * 3 + 1]);
+    ok(d > apothem * 0.985, `boundary vertex ${v} is on the rim of the pentagon, not inside it`);
+  }
+});
+
+test('piece: it lies flat, then rolls up into a torus with one disc gone', () => {
+  const flat = piecePositions(PIECE, 0);
+  for (let i = 0; i < PIECE.V; i++) ok(Math.abs(flat[i * 3 + 2]) < 1e-6, 'the net lies in a plane');
+
+  const R = PIECE.R, r = PIECE.r;
+  const up = piecePositions(PIECE, 1);
+  // every point is on the torus. the ring closes about the y axis, and act two
+  // was told to bend the other way, so the middle of the sheet -- and the hole
+  // in it -- comes out round the outside
+  let worst = 0, cz = 0;
+  for (let i = 0; i < PIECE.V; i++) cz = Math.max(cz, up[i * 3 + 2]);
+  for (let i = 0; i < PIECE.V; i++) {
+    const d = Math.hypot(up[i * 3], up[i * 3 + 2] - (r + R)) - R;
+    worst = Math.max(worst, Math.abs(Math.hypot(d, up[i * 3 + 1]) - r));
+  }
+  ok(worst < 1e-4, `every point lands on the torus: worst ${worst}`);
+
+  // and everything that should be glued has come together
+  for (const [a, b] of handleGluings(PIECE.h, false)) {
+    const d = Math.hypot(up[a * 3] - up[b * 3], up[a * 3 + 1] - up[b * 3 + 1], up[a * 3 + 2] - up[b * 3 + 2]);
+    ok(d < 1e-4, `glued pair ${a},${b} meets: ${d}`);
+  }
+});
+
+test('piece: the rim stays a boundary, and comes out round the outside', () => {
+  const up = piecePositions(PIECE, 1);
+  const R = PIECE.R, r = PIECE.r;
+  const rim = rimArc(PIECE.h, 0);
+  ok(rim.length > 4, 'there is a rim');
+  // the rim is a closed circle once it is rolled up: its two ends are the two
+  // lips of the slit, which are the same point on the surface
+  const a = rim[0], b = rim[rim.length - 1];
+  ok(Math.hypot(up[a * 3] - up[b * 3], up[a * 3 + 1] - up[b * 3 + 1], up[a * 3 + 2] - up[b * 3 + 2]) < 1e-4,
+     'the rim closes');
+  // and it sits on the outside of the ring, where a neck can reach it
+  for (const v of rim) {
+    const rad = Math.hypot(up[v * 3], up[v * 3 + 2] - (r + R));
+    ok(rad > R, `rim vertex ${v} is outside the ring's centre line: ${rad}`);
+  }
+});
+
+test('piece: act zero is flat, and does not start until the piece is drawn', () => {
+  const { open, curl, ring } = phaseAt(0.0, PIECE.plan);
+  eq([open, curl, ring], [0, 0, 0]);
+  // while act zero runs, nothing has left the plane
+  for (const t of [0.05, 0.12, 0.2, 0.26, 0.3]) {
+    const p = piecePositions(PIECE, t);
+    for (let i = 0; i < PIECE.V; i++) ok(Math.abs(p[i * 3 + 2]) < 1e-6, `flat at t=${t}`);
+  }
+  // by the time act one starts, the piece is the developed rectangle
+  const dev = piecePositions(PIECE, 0.36);
+  let w = 0, h = 0;
+  for (let i = 0; i < PIECE.V; i++) {
+    w = Math.max(w, Math.abs(dev[i * 3])); h = Math.max(h, Math.abs(dev[i * 3 + 1]));
+  }
+  ok(Math.abs(2 * w - 2 * Math.PI * PIECE.R) < 1e-3, 'developed to 2piR long');
+  ok(Math.abs(2 * h - 2 * Math.PI * PIECE.r) < 1e-3, 'developed to 2pir across');
+});
+
+// ---- two pentagons and a neck -----------------------------------------
+
+test('pair: the neck runs straight, and does not come out with a twist in it', () => {
+  const chain = buildRollChain({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1 });
+  const up = rollChainPositions(chain, 1);
+  const near = chain.cols[0], far = chain.cols[chain.cols.length - 1];
+  // Every ruled line of the neck joins a point of one rim to the point of the
+  // other that faces it, so they all have about the same length. Matching the
+  // rims the wrong way round shears the neck, and the lines fan out instead.
+  let lo = Infinity, hi = 0;
+  for (let k = 0; k < chain.m; k++) {
+    const a = near[k] * 3, b = far[k] * 3;
+    const d = Math.hypot(up[a] - up[b], up[a + 1] - up[b + 1], up[a + 2] - up[b + 2]);
+    lo = Math.min(lo, d); hi = Math.max(hi, d);
+  }
+  ok(hi / lo < 1.35, `the neck is not sheared: lengths ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
+
+  // and the two rims really are facing each other, one on each side
+  let leftX = 0, rightX = 0;
+  for (let k = 0; k < chain.m; k++) { leftX += up[near[k] * 3]; rightX += up[far[k] * 3]; }
+  ok(leftX / chain.m < 0 && rightX / chain.m > 0, 'the neck spans from one handle to the other');
+});
+
+test('pair: flat it is one connected piece, and the neck reaches both rims', () => {
+  const chain = buildRollChain({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1 });
+  const flat = rollChainPositions(chain, 0);
+  for (let i = 0; i < chain.V; i++) ok(Math.abs(flat[i * 3 + 2]) < 1e-6, 'the whole net lies in a plane');
+  // the two pentagons do not sit on top of each other
+  const p0 = chain.pieces[0], p1 = chain.pieces[1];
+  let max0 = -Infinity, min1 = Infinity;
+  for (let v = 0; v < p0.V; v++) max0 = Math.max(max0, flat[(chain.offset[0] + v) * 3]);
+  for (let v = 0; v < p1.V; v++) min1 = Math.min(min1, flat[(chain.offset[1] + v) * 3]);
+  ok(max0 <= min1 + 1e-6, `the two pentagons do not overlap: ${max0} then ${min1}`);
+  // and the neck bridges exactly the gap between their rim sides
+  const near = chain.cols[0], far = chain.cols[chain.cols.length - 1];
+  for (let k = 0; k < chain.m; k++) {
+    ok(Math.abs(flat[near[k] * 3] - max0) < 1e-3, 'the near end of the neck is on the left rim side');
+    ok(Math.abs(flat[far[k] * 3] - min1) < 1e-3, 'the far end is on the right rim side');
+  }
+});
+
+// ---- the report ------------------------------------------------------
+
+const el = document.getElementById('out');
+const failed = results.filter(r => !r.ok);
+el.textContent = results.map(r => (r.ok ? 'PASS ' : 'FAIL ') + r.name + (r.ok ? '' : '\n  ' + r.err)).join('\n') +
+  `\n\n${results.length - failed.length}/${results.length} passed`;
+document.title = failed.length ? 'FAIL' : 'PASS';

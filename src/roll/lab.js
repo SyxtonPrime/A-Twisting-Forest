@@ -1,47 +1,196 @@
 // The workshop: a bench for getting the roll right before it goes anywhere
-// near the game. One rectangle, one timeline, and a camera you can shove
-// about.
+// near the game. One specimen at a time, one timeline, and a camera you can
+// shove about.
 
 import { Solid } from '../scene3d.js';
 import { buildSheet, sheetPositions, sheetOverlay } from './sheet.js';
-import { phaseAt, actName, CURL_END, RING_START } from './roll.js';
+import { buildPiece, piecePositions, pieceOverlay } from './piece.js';
+import { buildChain, chainPositions, chainOverlay } from './chain.js';
+import { phaseAt, actName, TWO_ACT, THREE_ACT } from './roll.js';
 
 const $ = id => document.getElementById(id);
-const DURATION = 4600;                       // ms for the whole roll
+const DURATION = 5200;                       // ms for the whole roll
 
-const sheet = buildSheet(72, 36);
-const over = sheetOverlay(sheet, { along: 12, across: 6 });
-const solid = new Solid($('rollcanvas'), sheet, sheetPositions(sheet, 0, { R: 3, r: 1 }));
-solid.showSeams = false;                     // the mesh carries no seam list
-solid.backRGB = sheet.backRGB;
+// ---- the specimens ---------------------------------------------------
 
-const state = { t: 0, playing: false, dir: 1, R: 3, r: 1, grid: true, edges: true };
+// The camera swings round as it goes, and only in the one direction. It starts
+// square to the net, because a flat drawing seen obliquely is not obviously a
+// drawing, and comes round by the end of act one to look along the tube,
+// because the circle at the end of it is the point of that act. Where it
+// finishes hardly matters: a torus is the same from every angle round.
+const OVER = ({ curl, ring }) => ({
+  az: -0.12 - 0.75 * curl - 0.35 * ring,
+  el: 0.22 + 0.16 * curl + 0.30 * ring,
+});
+// A piece with a hole in it wants a different arc. Act two throws the middle
+// of the sheet round the outside of the ring, which means the hole spends the
+// whole of act one underneath, so the camera dips below to look at it and
+// comes back over the top as the ring closes.
+const UNDER = ({ curl, ring }) => ({
+  az: -0.12 - 0.75 * curl - 0.35 * ring,
+  el: 0.22 - 0.62 * curl + 0.95 * ring,
+});
+// A chain lies along one axis, and swinging the camera far round it stacks one
+// piece behind the other. So it swings less, and does its looking underneath
+// with the elevation instead.
+const ALONG = ({ curl, ring }) => ({
+  az: -0.15 - 0.45 * curl - 0.10 * ring,
+  el: 0.22 - 0.55 * curl + 0.88 * ring,
+});
+
+const SPECIMENS = {
+  rectangle: {
+    label: 'a rectangle → a torus',
+    title: 'a rectangle, rolled up',
+    marks: ['flat', 'a tube', 'a torus'],
+    cam: OVER,
+    note: `<p>The net is a rectangle 2&pi;R by 2&pi;r, with both pairs of opposite
+      edges to be glued. <b class="pa">The long edges</b> meet in act one and
+      <b class="pb">the ends</b> meet in act two.</p>
+    <p>Act one is a real bend: rolling a sheet round a cylinder changes no
+      length in it. Act two cannot be. A flat torus has curvature zero
+      everywhere and a torus of revolution does not, so the outside of the tube
+      stretches and the inside squashes. That is not a bug in the picture; it
+      is the reason the flat torus does not sit in space.</p>`,
+    build() {
+      const sheet = buildSheet(72, 36);
+      return {
+        mesh: sheet, plan: TWO_ACT, actZero: false,
+        over: sheetOverlay(sheet, { along: 12, across: 6 }),
+        at: (t, s, out) => sheetPositions(sheet, t, s, out),
+      };
+    },
+  },
+  pentagon: {
+    label: 'a pentagon → a torus with a disc gone',
+    title: 'a pentagon, rolled up',
+    marks: ['the net', 'developed', 'a tube', 'a holed torus'],
+    cam: UNDER,
+    note: `<p>A pentagon <i>a b a</i>&#8315;&#185; <i>b</i>&#8315;&#185; <i>c</i>
+      is a torus with a disc gone: glue <i>a</i> to <i>a</i>&#8315;&#185; and
+      <i>b</i> to <i>b</i>&#8315;&#185;, and <b class="pc">c</b> is left over as
+      the rim. All five corners are the same point of the surface, and the rim
+      is the circle round it.</p>
+    <p>For act one to be a roll and not a fold, <i>a</i> and <i>a</i>&#8315;&#185;
+      have to be opposite sides, which means drawing the pentagon as the
+      rectangle it really is. But then the disc that was taken out is the disc
+      round the corner, and all four corners of a rectangle are that one point,
+      so the hole has to be drawn either in four pieces at the corners or in one
+      piece in the middle with a hairline slit out to the edge. Neither has the
+      rim as a whole side.</p>
+    <p>So there are two drawings and no bend between them. <b>Act zero</b> is
+      the flat re-drawing: the notch zips shut and the rim sinks into the sheet.
+      It stretches, but it never leaves the plane. Turn it off and the piece
+      starts already developed, and every frame after that is an honest bend.</p>`,
+    build() {
+      const piece = buildPiece({ nu: 24, nv: 72, hu: 6, hv: 6, R: 3, r: 1, face: 0.25 });
+      return {
+        mesh: piece, plan: piece.plan, actZero: true,
+        over: pieceOverlay(piece, { along: 16, across: 6 }),
+        at: (t, s, out) => piecePositions(piece, t, s, out),
+      };
+    },
+  },
+  pair: {
+    label: 'two pentagons and a neck → a two-holed torus',
+    title: 'two pentagons and a neck',
+    marks: ['the net', 'developed', 'two tubes', 'genus two'],
+    cam: ALONG,
+    note: `<p>Two pentagons sewn to a rectangle along their rim sides. Flat it is
+      one connected piece, which is the whole reason the rim has to be a whole
+      side: a rectangle can be sewn to a side, and it cannot be sewn to a circle
+      in the middle of a sheet.</p>
+    <p>Which is exactly what act zero takes away. As each rim sinks into its
+      sheet the neck has nowhere flat left to be attached, so it lifts off the
+      page and arches under. That is not a cheat being covered up; it is the
+      difference between the two drawings, made visible.</p>
+    <p>The far rim is walked the other way round, so the two ends of the neck
+      agree about which side is out. Walk them the same way and the neck comes
+      out with a half turn in it, which would be a Klein bottle by accident.</p>`,
+    build() {
+      const chain = buildChain({ nu: 20, nv: 60, hu: 5, hv: 5, R: 3, r: 1 });
+      return {
+        mesh: chain, plan: chain.plan, actZero: true,
+        over: chainOverlay(chain, { along: 12, across: 5 }),
+        at: (t, s, out) => chainPositions(chain, t, s, out),
+      };
+    },
+  },
+};
+
+const state = { t: 0, playing: false, dir: 1, R: 3, r: 1, grid: true, edges: true,
+                kind: 'rectangle', zero: true };
+let spec = SPECIMENS.rectangle.build();
+let solid = new Solid($('rollcanvas'), spec.mesh, spec.at(0, state));
+solid.showSeams = false;                     // no mesh here carries a seam list
+solid.backRGB = spec.mesh.backRGB;
 let smoothR = null, last = 0;
 
+// Which timeline this specimen is running: with act zero switched off, a piece
+// that has one simply starts already developed, which is the honest two-bend
+// version of it.
+function plan() {
+  return spec.actZero && state.zero ? THREE_ACT : TWO_ACT;
+}
+
+// What the piece is at each rest between the acts. With act zero switched off
+// there is one fewer of them, and it is the first that goes: the piece starts
+// already developed.
+function rests() {
+  const m = SPECIMENS[state.kind].marks;
+  return plan() === TWO_ACT && m.length > 3 ? m.slice(1) : m;
+}
+
+function setSpecimen(kind) {
+  state.kind = kind;
+  spec = SPECIMENS[kind].build();
+  solid.mesh = spec.mesh;
+  solid.faceRGB = spec.mesh.rgb;
+  solid.backRGB = spec.mesh.backRGB;
+  solid.pos = spec.at(state.t, state);
+  smoothR = null;
+  solid.autoSpin = true;
+  $('lab-title').textContent = SPECIMENS[kind].title;
+  $('notes-body').innerHTML = SPECIMENS[kind].note;
+  fit();
+  ticks();
+}
+
 function apply() {
-  solid.pos = sheetPositions(sheet, state.t, state, solid.pos);
+  const p = plan();
+  spec.plan = p;
+  if (spec.mesh.plan) spec.mesh.plan = p;
+  solid.pos = recentre(spec.at(state.t, state, solid.pos), spec.mesh.V);
   if (solid.autoSpin) {                      // until the user takes the camera
-    // The camera swings round as it goes, and only in the one direction. It
-    // starts square to the net, because a rectangle seen obliquely is not
-    // obviously a rectangle, and comes round by the end of act one to look
-    // along the tube, because the circle at the end of it is the whole point
-    // of the act. Where it finishes hardly matters: a torus is the same from
-    // every angle round.
-    const { curl, ring } = phaseAt(state.t);
-    solid.az = -0.12 - 0.75 * curl - 0.35 * ring;
-    solid.el = 0.22 + 0.16 * curl + 0.30 * ring;
+    const c = SPECIMENS[state.kind].cam(phaseAt(state.t, p));
+    solid.az = c.az; solid.el = c.el;
   }
-  const rad = frameRadius(solid.pos, sheet.V, solid);
+  const rad = frameRadius(solid.pos, spec.mesh.V, solid);
   // ease the framing rather than letting it snap: the net is nineteen units
   // long and the torus it becomes is eight across, and the camera has to
   // travel most of that distance in the last act
   smoothR = smoothR === null ? rad : smoothR + (rad - smoothR) * 0.14;
   solid.radiusOverride = smoothR;
-  solid.overlay = [].concat(state.grid ? over.grid : [], state.edges ? over.edges : []);
+  solid.overlay = [].concat(state.grid ? spec.over.grid : [], state.edges ? spec.over.edges : []);
   $('t').value = String(state.t);
-  $('roll-act').textContent = actName(state.t);
+  $('roll-act').textContent = actName(state.t, p, rests());
   $('t-out').textContent = state.t.toFixed(2);
   $('play').textContent = state.playing ? 'pause' : state.t >= 1 ? 'lay it flat' : 'roll it up';
+}
+
+// The roll is anchored at the middle of the sheet, and the finished torus ends
+// up sitting a good way off the origin; without this it wanders out of frame
+// in the last act.
+function recentre(pos, V) {
+  let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity;
+  for (let i = 0; i < V; i++) {
+    const x = pos[i * 3], z = pos[i * 3 + 2];
+    if (x < minx) minx = x; if (x > maxx) maxx = x;
+    if (z < minz) minz = z; if (z > maxz) maxz = z;
+  }
+  const cx = (minx + maxx) / 2, cz = (minz + maxz) / 2;
+  for (let i = 0; i < V; i++) { pos[i * 3] -= cx; pos[i * 3 + 2] -= cz; }
+  return pos;
 }
 
 // Pull the camera back just far enough that all of it fits the frame. Fitting
@@ -103,6 +252,28 @@ function fit() {
   solid.resize(w, h, dpr);
 }
 
+// Where each act begins and ends, ticked on the scrubber, and what the thing
+// is at each rest between them.
+function ticks() {
+  const p = plan(), box = $('marks');
+  for (const el of box.querySelectorAll('.tick, .rest')) el.remove();
+  for (const a of p) {
+    for (const at of [a.from, a.to]) {
+      if (at <= 0 || at >= 1) continue;
+      const i = document.createElement('i');
+      i.className = 'tick';
+      i.style.left = `${at * 100}%`;
+      box.appendChild(i);
+    }
+  }
+  $('legend').innerHTML = '';
+  for (const m of rests()) {
+    const s = document.createElement('span');
+    s.textContent = m;
+    $('legend').appendChild(s);
+  }
+}
+
 // ---- wiring ----------------------------------------------------------
 
 $('play').onclick = () => {
@@ -118,10 +289,13 @@ $('aspect').oninput = e => {
 };
 $('grid').onchange = e => { state.grid = e.target.checked; };
 $('edges').onchange = e => { state.edges = e.target.checked; };
+$('zero').onchange = e => { state.zero = e.target.checked; ticks(); };
 $('recentre').onclick = () => { solid.autoSpin = true; solid.zoom = 1; };
+$('specimen').onchange = e => { state.t = 0; state.dir = 1; state.playing = false; setSpecimen(e.target.value); };
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' && e.key !== ' ') return;
+  if (e.target.tagName === 'SELECT') return;
   if (e.key === ' ') { e.preventDefault(); $('play').click(); }
   else if (e.key === 'ArrowRight') { state.playing = false; state.t = Math.min(1, state.t + 0.02); }
   else if (e.key === 'ArrowLeft') { state.playing = false; state.t = Math.max(0, state.t - 0.02); }
@@ -131,22 +305,30 @@ document.addEventListener('keydown', e => {
 let timer;
 window.addEventListener('resize', () => { clearTimeout(timer); timer = setTimeout(fit, 120); });
 
-// The moment and the shape can be named in the hash -- #t=0.72&R=2 -- so a
-// particular frame can be pointed at, and looked at again later.
+// The specimen, the moment and the shape can be named in the hash --
+// #what=pentagon&t=0.72&R=2 -- so a particular frame can be pointed at, and
+// looked at again later.
 const hash = new URLSearchParams(location.hash.slice(1));
-if (hash.has('t')) state.t = Math.max(0, Math.min(1, Number(hash.get('t')) || 0));
 if (hash.has('R')) state.R = Math.max(1, Math.min(5, Number(hash.get('R')) || 3));
+if (hash.get('zero') === '0') state.zero = false;
+$('zero').checked = state.zero;
+$('aspect').value = String(state.R);
+$('aspect-out').textContent = `${state.R.toFixed(2)} : 1`;
+$('aspect-note').hidden = state.R > 1.06;
+for (const [k, v] of Object.entries(SPECIMENS)) {
+  const o = document.createElement('option');
+  o.value = k; o.textContent = v.label;
+  $('specimen').appendChild(o);
+}
+const want = hash.get('what');
+$('specimen').value = SPECIMENS[want] ? want : 'rectangle';
+setSpecimen($('specimen').value);
+if (hash.has('t')) state.t = Math.max(0, Math.min(1, Number(hash.get('t')) || 0));
 if (hash.has('az')) solid.az = Number(hash.get('az'));
 if (hash.has('el')) solid.el = Number(hash.get('el'));
 if (hash.has('az') || hash.has('el')) solid.autoSpin = false;
 
-$('aspect').value = String(state.R);
-$('aspect-out').textContent = `${state.R.toFixed(2)} : 1`;
-$('aspect-note').hidden = state.R > 1.06;
-$('marks').style.setProperty('--curl-end', `${CURL_END * 100}%`);
-$('marks').style.setProperty('--ring-start', `${RING_START * 100}%`);
-fit();
 apply();
 requestAnimationFrame(frame);
 
-window.lab = { state, sheet, solid, apply, phaseAt };
+window.lab = { state, spec: () => spec, solid: () => solid, apply, phaseAt, setSpecimen };

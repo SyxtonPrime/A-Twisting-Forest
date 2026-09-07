@@ -46,12 +46,16 @@ export function buildHandle(opts = {}) {
   const rims = opts.rims === undefined ? 1 : opts.rims;
   const u0 = opts.u0 !== undefined ? opts.u0 : Math.round(nu / 2);
 
-  // Holes sit a row up from the bottom, so the slit comes out one cell short
-  // of the corner and the piece reads as a pentagon with a tab rather than as
-  // something with a long side torn in half.
+  // Where round the ring the first hole sits. One row up from the bottom by
+  // default, so the slit comes out one cell short of the corner and the piece
+  // reads as a pentagon with a tab rather than as something with a long side
+  // torn in half. A chain wants it somewhere in particular instead -- on the
+  // side of the torus that faces the neighbour it is joined to -- so it can be
+  // said.
+  const v0 = opts.v0 === undefined ? 1 : opts.v0;
   const holes = [];
-  if (rims >= 1) holes.push({ u0, v0: 1 });
-  if (rims >= 2) holes.push({ u0, v0: Math.round(nv / 2) + 1 });
+  if (rims >= 1) holes.push({ u0, v0 });
+  if (rims >= 2) holes.push({ u0, v0: v0 + Math.round(nv / 2) });
 
   const slitRow = new Map(holes.map(h => [h.v0, h]));
   const inHole = (u, v) => holes.some(h => u > h.u0 && u < h.u0 + hu && v > h.v0 && v < h.v0 + hv);

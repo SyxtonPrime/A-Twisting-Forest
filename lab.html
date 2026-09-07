@@ -19,13 +19,18 @@
     <canvas id="rollcanvas"></canvas>
   </section>
   <aside id="lab-controls">
-    <h1>a rectangle, rolled up</h1>
+    <h1 id="lab-title">a rectangle, rolled up</h1>
     <p id="roll-act" class="act"></p>
+
+    <div class="ctl">
+      <label for="specimen">the piece</label>
+      <select id="specimen"></select>
+    </div>
 
     <div class="ctl">
       <label for="t">the roll <b id="t-out">0.00</b></label>
       <div id="marks"><input id="t" type="range" min="0" max="1" step="0.001" value="0"></div>
-      <div class="legend"><span>flat</span><span>a tube</span><span>a torus</span></div>
+      <div class="legend" id="legend"></div>
     </div>
 
     <div class="buttons">
@@ -43,17 +48,11 @@
     <div class="ctl toggles">
       <label><input id="grid" type="checkbox" checked> the grid</label>
       <label><input id="edges" type="checkbox" checked> the edges</label>
+      <label><input id="zero" type="checkbox" checked> act zero</label>
     </div>
 
     <div class="notes">
-      <p>The net is a rectangle 2&pi;R by 2&pi;r, with both pairs of opposite
-        edges to be glued. <b class="pa">The long edges</b> meet in act one and
-        <b class="pb">the ends</b> meet in act two.</p>
-      <p>Act one is a real bend: rolling a sheet round a cylinder changes no
-        length in it. Act two cannot be. A flat torus has curvature zero
-        everywhere and a torus of revolution does not, so the outside of the
-        tube stretches and the inside squashes. That is not a bug in the
-        picture; it is the reason the flat torus does not sit in space.</p>
+      <div id="notes-body"></div>
       <p class="cap">drag to turn it, scroll to zoom, space to play,
         arrows to scrub.</p>
     </div>

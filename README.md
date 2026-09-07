@@ -154,7 +154,62 @@ The rectangle also has to be a rectangle and not a square. A square forces
 point and which touches itself all the way round. The `R : r` slider goes down
 to 1 so you can watch that happen.
 
-`#t=0.72&R=2` in the hash opens the page at that moment and that shape.
+`#what=pentagon&t=0.72&R=2` in the hash opens the page at that piece, moment
+and shape.
+
+### Why a pentagon needs an act zero
+
+A pentagon `a b a⁻¹ b⁻¹ c` is a torus with a disc gone: glue `a` to `a⁻¹` and
+`b` to `b⁻¹`, and `c` is left over as the rim. All five corners of the pentagon
+turn out to be the same point of the surface, and `c` is the circle round it.
+
+The bends want to work. Glue `a` to `a⁻¹` and the pentagon becomes a tube whose
+two ends are `b`, of length B, and `b⁻¹` together with `c`, of length B + C — a
+funnel. Bend that round, glue `b` onto the `b⁻¹` part of the far end, and `c` is
+what is left. Two acts, and the rim closes into a circle because `c`'s two
+endpoints are identified.
+
+What stops it being two acts of pure bending is subtler than a stretch. For act
+one to be a **roll** rather than a fold across `b`, `a` and `a⁻¹` have to be
+*opposite* sides, which means drawing the pentagon as the rectangle it really
+is: the torus square with a bite taken out of one corner. But the disc that was
+removed is the disc round the corner point, and all four corners of that square
+are that one point. So the hole is drawn either in four pieces at the four
+corners, or in one piece in the middle with a hairline slit out to the edge.
+Neither of those has the rim as a whole side — and a rim that is not a whole
+side cannot have a rectangle sewn to it edge to edge, which is the one thing
+that makes the whole net lie down in one connected piece.
+
+So there are two drawings of the same piece and no bend between them:
+
+- **the pentagon**, which lies down in one piece with its neighbours, and
+- **the developed rectangle**, which bends up honestly.
+
+The move between them is the classification theorem's own cut-and-paste. Act
+zero does it as a flat re-drawing instead: the notch zips shut and the rim
+sinks into the middle of the sheet. It stretches, but it never leaves the
+plane, so nothing passes through a shape that is not a surface. Switch act zero
+off and the piece starts already developed, and every frame after that is a
+genuine bend.
+
+### Two pentagons and a neck
+
+Genus two, as one net: two pentagons sewn to a rectangle along their rim sides.
+
+Act zero is where the price gets paid in public. As each rim sinks into its
+sheet, the neck has nowhere flat left to be attached, so it lifts off the page
+and arches under. That is not a cheat being covered up — it is the difference
+between the two drawings, made visible.
+
+The two rims have to be matched up, and walking the far one backwards is not
+enough. Reversing a closed walk is a reflection, but it is the reflection that
+fixes wherever the walk happens to start, which is a corner of the hole rather
+than the axis the two rims want to agree about. The neck comes out sheared,
+every ruled line crossing it diagonally. The two holes face each other, so they
+agree about the way round the tube and disagree about the way round the ring:
+keep the one, mirror the other, and the neck runs straight. There is a test
+that every ruled line of the neck is about the same length, which a sheared
+match fails.
 
 ## Where this is going
 
@@ -199,8 +254,12 @@ later, and the smoothing pass is chosen to preserve it.
   it on its own.
 - `src/roll/sheet.js` — the rectangle as a grid of quads, and the grid and
   coloured edges drawn on it.
-- `src/roll/lab.js` — the workshop page: timeline, camera, and the framing that
-  keeps a long thin net and a fat torus both filling the frame.
+- `src/roll/piece.js` — one handle: the pentagon and the developed rectangle as
+  two drawings of the same grid, the flat morph between them, and Tutte's
+  embedding for the pentagon.
+- `src/roll/chain.js` — two handles and the neck between them, as one mesh.
+- `src/roll/lab.js` — the workshop page: the specimens, timeline, camera, and
+  the framing that keeps a long thin net and a fat torus both filling the frame.
 
 ### One sharp edge
 

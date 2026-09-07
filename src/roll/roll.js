@@ -28,34 +28,51 @@
 //
 // so that the two circumferences come out right and act one is a pure bend.
 
-// Act one runs to CURL_END, then the tube sits still for a beat, then act two
-// runs from RING_START. The beat is worth the tenth of a second it costs: it
-// is the moment the thing is a cylinder and nothing else, and without it the
-// two bends read as one muddled motion.
-export const CURL_END = 0.45;
-export const RING_START = 0.55;
+// A timeline is a list of acts, each with the stretch of it that it owns. The
+// gaps between them are beats, and they are worth the tenth of a second they
+// cost: a beat is the moment the thing is a cylinder and nothing else, and
+// without one the bends either side read as a single muddled motion.
+//
+// `open` is act zero, and only some pieces have one: it is the flat re-drawing
+// that takes a net which lies down in one connected piece to the net that
+// bends up honestly. A piece with no act zero starts already developed, which
+// is why `open` reads 1 when nothing sets it.
+export const TWO_ACT = [
+  { key: 'curl', from: 0.00, to: 0.45, name: 'act one: the sheet curls, and the long edges come together' },
+  { key: 'ring', from: 0.55, to: 1.00, name: 'act two: the tube bends, and its two ends come together' },
+];
+export const THREE_ACT = [
+  { key: 'open', from: 0.00, to: 0.26, name: 'act zero: the notch zips shut and the rim sinks into the sheet' },
+  { key: 'curl', from: 0.36, to: 0.64, name: 'act one: the sheet curls, and the long edges come together' },
+  { key: 'ring', from: 0.74, to: 1.00, name: 'act two: the tube bends, and its two ends come together' },
+];
+
+export const CURL_END = TWO_ACT[0].to;
+export const RING_START = TWO_ACT[1].from;
 
 const ease = x =>
   x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
 
 // How far through each act a given point on the timeline is.
-export function phaseAt(t) {
+export function phaseAt(t, plan = TWO_ACT) {
   const u = Math.max(0, Math.min(1, t));
-  return {
-    t: u,
-    curl: ease(u / CURL_END),
-    ring: ease((u - RING_START) / (1 - RING_START)),
-  };
+  const out = { t: u, open: 1, curl: 0, ring: 0 };
+  for (const a of plan) out[a.key] = ease((u - a.from) / (a.to - a.from));
+  return out;
 }
 
-// What to call where we are, for the caption under the canvas.
-export function actName(t) {
-  if (t <= 0.001) return 'the net: a rectangle, opposite edges to be glued';
-  if (t < CURL_END) return 'act one: the sheet curls, and the long edges come together';
-  if (t < RING_START) return 'a cylinder. the first pair of edges is glued';
-  if (t < 0.999) return 'act two: the tube bends, and its two ends come together';
-  return 'a torus. both pairs glued, and no edge left over';
+// What to call where we are, for the caption under the canvas. Inside an act
+// it is the act's own name; in a beat it is what the thing is right now.
+export function actName(t, plan = TWO_ACT, rest = REST) {
+  const u = Math.max(0, Math.min(1, t));
+  for (const a of plan) if (u > a.from && u < a.to) return a.name;
+  let k = 0;
+  for (const a of plan) if (u >= a.to) k++;
+  return rest[Math.min(k, rest.length - 1)];
 }
+
+const REST = ['the net, lying flat', 'a cylinder. the first pair of edges is glued',
+              'a torus. both pairs glued, and no edge left over'];
 
 // A point of the sheet, part way through the roll.
 //
@@ -63,7 +80,12 @@ export function actName(t) {
 // tube and 1 for a closed ring. Each act is a bend of a known radius -- r/curl
 // and R/ring -- which is why the sheet stays a sheet all the way through
 // rather than passing through anything that is not a surface.
-export function rollPoint(x, y, R, r, curl, ring, out = [0, 0, 0]) {
+// `side` says which way act two bends. With +1 the middle of the sheet ends up
+// round the inside of the ring and with -1 round the outside, and that decides
+// where a hole cut in the middle of the net comes out on the finished torus.
+// A neck to the next handle has to leave from the outside, so a piece with a
+// hole in it wants -1; the bare rectangle has no hole and keeps +1.
+export function rollPoint(x, y, R, r, curl, ring, out = [0, 0, 0], side = 1) {
   // Act one. The cross-section lives in y and z, and the sheet rolls towards
   // +z about a line parallel to x, so the middle of the sheet never moves and
   // the two long edges swing round to meet above it.
@@ -87,9 +109,9 @@ export function rollPoint(x, y, R, r, curl, ring, out = [0, 0, 0]) {
   const rho2 = R / ring;
   const ph = (x * ring) / R;
   const half2 = Math.sin(ph / 2);
-  const rad = rho2 + (z1 - r);               // how far out from the bend centre
+  const rad = rho2 + side * (z1 - r);        // how far out from the bend centre
   out[0] = rad * Math.sin(ph);
   out[1] = y1;
-  out[2] = r - 2 * rho2 * half2 * half2 + (z1 - r) * Math.cos(ph);
+  out[2] = r - 2 * side * rho2 * half2 * half2 + (z1 - r) * Math.cos(ph);
   return out;
 }
