@@ -189,18 +189,55 @@ the wrong place if it is not: while the net was rolling up, the grid and the
 seams moved with it and the walk stayed behind in the shape of the finished
 solid, arcing through empty air where the tubes were going to be.
 
+## The correspondence
+
+The chain net and the solid have to be the same mesh before one can roll into
+the other, and that needs a map between the pentagon `a b a⁻¹ b⁻¹ c` and a
+torus with a disc taken out of it. `src/handle.js` is that map.
+
+Going pentagon-first does not work. The pentagon is a cut of the surface along
+two loops based on the rim, and writing that cut down on a grid is awkward.
+Going torus-first does work, and hands you the pentagon.
+
+Take the torus as a grid in `u` and `v`, both wrapped. Cut along `u = 0` and
+along `v = 0` and it opens into a square, which is the closed torus,
+`a b a⁻¹ b⁻¹`. Take a disc out of the middle, and it is no longer a disc
+itself, so cut a slit from the hole out to the edge. Now it is simply
+connected, and its boundary reads round as
+
+```
+a   b   a⁻¹   (part of b⁻¹)   s   c   s⁻¹   (rest of b⁻¹)
+```
+
+**The rim `c` is one unbroken arc, with the two lips of the slit either side of
+it.** That is the whole point, and it is what the other net could never
+manage. A rim that is a closed circle in the middle of a sheet can never be
+glued to anything edge to edge; a rim that is an arc of the boundary can. The
+slit is what turns one into the other, and it costs nothing, because its two
+lips are glued straight back to each other.
+
+It does not break the gluing counts either. The slit meets the `u = 0` edge and
+splits it in two, so `b⁻¹` arrives in two pieces, but the two pieces have
+between them exactly as many cells as `b`, so every cell still has its partner.
+
+The map into three dimensions is then the identity on `(u, v)`: a grid point
+goes to the point of a torus of revolution at those two angles. The duplicated
+vertices, the far edges and the two lips, land on the same point, which is
+exactly what it means for them to be glued. Closing the ring with a flip
+instead gives a Klein bottle with a disc out, which is the twisted handle.
+
+The tests check all of it: Euler characteristic −1 either way, the rim a single
+circle with every point of it having two neighbours, no edge bordering more
+than two faces, orientable when plain and not when twisted, every glued pair
+landing on the same point, and every vertex the right distance from the ring's
+core circle.
+
 ## What is not joined up yet
 
-There are two nets, and only one of them rolls up. The chain of pentagons is
-the honest single piece, and it is a drawing. The cut-into-pieces net is the
-one that animates, because the net and the solid have to be the same mesh for
-that, and the solid is built as a capsule with tubes.
-
-Marrying them means building the solid from the chain instead: a row of tori
-joined by cylinders. The obstacle is not the topology, it is finding where each
-point of a pentagon lands on a torus. A square maps onto a torus of revolution
-in one line, but the pentagon is a different cut, and the map is the thing that
-would need working out.
+The handle unit exists and is verified. What is left is assembly: laying the
+cut piece out as an actual pentagon rather than as a slit square, which is a
+Tutte embedding with the boundary pinned to the pentagon, and then joining the
+units with cylinders and running the whole chain into the solid.
 
 ## Where this is going
 
@@ -228,6 +265,8 @@ later, and the smoothing pass is chosen to preserve it.
   the classification: Euler characteristic, orientability, cone points.
 - `src/handlebody.js` — the solid: a capsule, a pair of holes per tube, and a
   stitched tube between each pair.
+- `src/handle.js` — one handle of the chain in both its forms at once: the cut
+  piece, its gluings, and where each of its points sits on the torus.
 - `src/chainnet.js` — the net as one connected piece: pentagons, hexagons and
   the rectangles between them, with the gluing lettered and arrowed.
 - `src/net.js` — the same world cut into separate flat pieces instead, each

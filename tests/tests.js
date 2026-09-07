@@ -3,6 +3,7 @@ import { Explore } from '../src/explore.js';
 import { World } from '../src/world.js';
 import { buildMesh } from '../src/mesh.js';
 import { buildHandlebody } from '../src/handlebody.js';
+import { buildHandle, handleGluings, boundaryLoop } from '../src/handle.js';
 import { mulberry32 } from '../src/rng.js';
 
 const results = [];
@@ -634,6 +635,131 @@ test('handlebody: the mesh is a closed surface with nothing stranded', () => {
       }
     }
     eq(reached, m.V, `${label}: all one piece`);
+  }
+});
+
+// Glue a cut piece up and report what surface it turned out to be.
+function glueUp(h, twisted) {
+  const parent = [...Array(h.V).keys()];
+  const find = a => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  for (const [a, b] of handleGluings(h, twisted)) {
+    const x = find(a), y = find(b);
+    if (x !== y) parent[x] = y;
+  }
+  const key = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+  const use = new Map(), dir = new Map();
+  for (let fi = 0; fi < h.faces.length; fi++) {
+    const f = h.faces[fi];
+    for (let i = 0; i < 4; i++) {
+      const a = find(f[i]), b = find(f[(i + 1) % 4]);
+      if (a === b) continue;
+      const k = key(a, b);
+      use.set(k, (use.get(k) || 0) + 1);
+      if (!dir.has(k)) dir.set(k, []);
+      dir.get(k).push([fi, a < b ? 1 : -1]);
+    }
+  }
+  const V = new Set([...Array(h.V).keys()].map(find)).size;
+  const chi = V - use.size + h.F;
+  const free = [...use].filter(([, n]) => n === 1).map(([k]) => k.split(':').map(Number));
+  const adj = new Map();
+  for (const [a, b] of free) {
+    if (!adj.has(a)) adj.set(a, []);
+    if (!adj.has(b)) adj.set(b, []);
+    adj.get(a).push(b); adj.get(b).push(a);
+  }
+  let cycles = 0; const seen = new Set();
+  for (const s0 of adj.keys()) {
+    if (seen.has(s0)) continue;
+    cycles++; const st = [s0]; seen.add(s0);
+    while (st.length) { const v = st.pop(); for (const w of adj.get(v)) if (!seen.has(w)) { seen.add(w); st.push(w); } }
+  }
+  const nbr = new Map();
+  for (const [, l] of dir) if (l.length === 2) {
+    const [[f, df], [g, dg]] = l;
+    if (!nbr.has(f)) nbr.set(f, []);
+    if (!nbr.has(g)) nbr.set(g, []);
+    nbr.get(f).push([g, df === dg]); nbr.get(g).push([f, df === dg]);
+  }
+  const sign = new Int8Array(h.faces.length), done = new Uint8Array(h.faces.length);
+  let orientable = true;
+  for (let s0 = 0; s0 < h.faces.length; s0++) {
+    if (done[s0]) continue;
+    sign[s0] = 1; done[s0] = 1; const st = [s0];
+    while (st.length) {
+      const f = st.pop();
+      for (const [g, flip] of (nbr.get(f) || [])) {
+        const want = flip ? -sign[f] : sign[f];
+        if (!done[g]) { sign[g] = want; done[g] = 1; st.push(g); }
+        else if (sign[g] !== want) orientable = false;
+      }
+    }
+  }
+  const maxShare = Math.max(...use.values());
+  const rimDegrees = [...new Set([...adj.values()].map(l => l.length))];
+  return { chi, cycles, orientable, maxShare, rim: free.length, rimDegrees, V };
+}
+
+test('handle: the cut piece glues up into a torus with one disc gone', () => {
+  const h = buildHandle({});
+  const r = glueUp(h, false);
+  eq(r.chi, -1, 'a torus with a disc out has euler characteristic -1');
+  eq(r.orientable, true, 'and it is two-sided');
+  eq(r.cycles, 1, 'the rim is a single circle');
+  eq(r.rimDegrees, [2], 'and every point of it has exactly two neighbours');
+  eq(r.rim, 2 * (h.hu + h.hv), 'the rim is as long as the hole it came from');
+  eq(r.maxShare, 2, 'no edge borders more than two faces');
+});
+
+test('handle: closing the ring with a flip makes it a klein bottle instead', () => {
+  const h = buildHandle({});
+  const r = glueUp(h, true);
+  eq(r.chi, -1, 'a klein bottle with a disc out has the same euler characteristic');
+  eq(r.orientable, false, 'but it is one-sided');
+  eq(r.cycles, 1, 'the rim is still a single circle');
+  eq(r.maxShare, 2, 'and it is still a surface');
+});
+
+test('handle: the rim is one unbroken arc of the cut piece, which is the point', () => {
+  const h = buildHandle({});
+  const loop = boundaryLoop(h);
+  ok(loop.length > 0, 'the cut piece has a boundary');
+  // the rim's vertices are the ones ringing the hole, and they must sit
+  // together along the walk rather than being scattered through it
+  const isRim = v => {
+    const [u, w] = h.uv[v];
+    return u >= h.u0 && u <= h.u0 + h.hu && w >= h.v0 && w <= h.v0 + h.hv;
+  };
+  const flags = loop.map(isRim);
+  let runs = 0;
+  for (let i = 0; i < flags.length; i++) {
+    const prev = flags[(i - 1 + flags.length) % flags.length];
+    if (flags[i] && !prev) runs++;
+  }
+  eq(runs, 1, 'the rim appears as one unbroken run of the boundary walk');
+  // In the cut piece the rim is still an arc, not yet a circle: its two ends
+  // are the two lips of the slit, which only become one point once it is
+  // rolled up. So it has one more vertex than it has edges.
+  eq(flags.filter(Boolean).length, 2 * (h.hu + h.hv) + 1, 'and it is the whole rim');
+});
+
+test('handle: rolling it up puts every glued pair at the same point', () => {
+  const h = buildHandle({});
+  for (const twisted of [false, true]) {
+    for (const [a, b] of handleGluings(h, twisted)) {
+      const d = Math.hypot(h.solid[a * 3] - h.solid[b * 3],
+                           h.solid[a * 3 + 1] - h.solid[b * 3 + 1],
+                           h.solid[a * 3 + 2] - h.solid[b * 3 + 2]);
+      if (!twisted) ok(d < 1e-4, `glued pair ${a},${b} lands apart by ${d.toFixed(4)}`);
+    }
+  }
+  // and the piece really is a torus of revolution: every point the right
+  // distance from the ring's core circle
+  const R = 1.7, r = 0.62;
+  for (let i = 0; i < h.V; i++) {
+    const x = h.solid[i * 3], y = h.solid[i * 3 + 1], z = h.solid[i * 3 + 2];
+    const d = Math.hypot(Math.hypot(x, z) - R, y);
+    ok(Math.abs(d - r) < 1e-4, `vertex ${i} is ${d.toFixed(4)} from the core, not ${r}`);
   }
 });
 
