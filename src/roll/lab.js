@@ -96,14 +96,19 @@ const SPECIMENS = {
     title: 'a net you build',
     marks: ['the net', 'developed', 'tubes', 'the surface'],
     cam: ALONG,
-    note: `<p><b>Tap a piece</b> and it grows a side, a neck, and another handle
-      on the end of it. A piece with <i>k</i> necks on it is a
-      (4&nbsp;+&nbsp;<i>k</i>)-gon, so the number of sides is the number of
-      neighbours plus four: a lone square is a closed torus, a pentagon has one
-      neck, a hexagon two.</p>
-    <p>The genus is just the number of pieces, because every one of them is a
-      handle and the necks between them add nothing. So &chi; = 2 &minus; 2g,
-      and the net you draw is the whole of the arithmetic.</p>
+    note: `<p><b>Tap a piece</b> and it grows a side, a neck, and something new
+      on the end of it. A <b>handle</b> is a
+      (4&nbsp;+&nbsp;<i>k</i>)-gon when it has <i>k</i> necks on it, so the
+      number of sides is the number of neighbours plus four: a lone square is a
+      closed torus, a pentagon has one neck, a hexagon two. Every handle is one
+      more of genus, so &chi; = 2 &minus; 2g and the net you draw is the whole
+      of the arithmetic.</p>
+    <p>A <b>cap</b> closes a neck off and adds nothing. A disc has no side to
+      spare &mdash; its whole boundary is the rim &mdash; so it gets the same
+      slit a handle gets, cut from the rim to the middle, and opened out it is
+      a circular sector. Act one rolls the sector into a cone, and <em>that one
+      is honest all the way</em>: a cone is developable, so no length in the
+      paper changes. Only rounding the cone off into a ball has to stretch.</p>
     <p>Flat, the pieces lie in the page. Rolled, the tori lie in the plane you
       are looking down on. Those are two different planes, so the whole
       arrangement tips from one to the other as the rings close &mdash; which
@@ -121,7 +126,7 @@ const SPECIMENS = {
 };
 
 const state = { t: 0, playing: false, dir: 1, R: 3, r: 1, grid: true, edges: true,
-                kind: 'rectangle', zero: true };
+                kind: 'rectangle', zero: true, adds: 'handle' };
 // The net being drawn, and the handles already worked out. Every piece with
 // the same number of necks and the same handedness is the same piece, so one
 // of each is built and the rest are placings of it.
@@ -186,8 +191,9 @@ function apply() {
   const editing = state.kind === 'net';
   $('edit').hidden = !editing;
   if (editing) {
-    const g = model.nodes.length;
-    $('shape').textContent = `${g} handle${g === 1 ? '' : 's'} — genus ${g}, χ = ${2 - 2 * g}`;
+    const g = spec.mesh.genus, c = spec.mesh.caps;
+    $('shape').textContent = `${g} handle${g === 1 ? '' : 's'}` +
+      (c ? `, ${c} cap${c === 1 ? '' : 's'}` : '') + ` — genus ${g}, χ = ${2 - 2 * g}`;
     $('prune').disabled = g < 2;
   }
 }
@@ -329,6 +335,15 @@ $('grid').onchange = e => { state.grid = e.target.checked; };
 $('edges').onchange = e => { state.edges = e.target.checked; };
 $('zero').onchange = e => { state.zero = e.target.checked; ticks(); };
 $('recentre').onclick = () => { solid.autoSpin = true; solid.zoom = 1; };
+for (const b of document.querySelectorAll('#adds button')) {
+  b.onclick = () => {
+    state.adds = b.dataset.adds;
+    for (const o of document.querySelectorAll('#adds button')) {
+      o.setAttribute('aria-pressed', String(o.dataset.adds === state.adds));
+    }
+  };
+  b.setAttribute('aria-pressed', String(b.dataset.adds === 'handle'));
+}
 $('prune').onclick = () => {
   for (let i = model.nodes.length - 1; i >= 0; i--) {
     if (canPrune(model, i)) { prune(model, i); rebuild(); return; }
@@ -365,7 +380,7 @@ function rebuild() {
     const sx = (e.clientX - box.left) * (solid.w / box.width);
     const sy = (e.clientY - box.top) * (solid.h / box.height);
     const at = pieceAt(spec.mesh, solid.pos, sx, sy, (x, y, z) => solid.point(solid.cam, x, y, z));
-    if (at >= 0) { grow(model, at); rebuild(); }
+    if (at >= 0 && grow(model, at, state.adds) >= 0) rebuild();
   });
 }
 $('specimen').onchange = e => { state.t = 0; state.dir = 1; state.playing = false; setSpecimen(e.target.value); };
@@ -399,9 +414,13 @@ for (const [k, v] of Object.entries(SPECIMENS)) {
 }
 // a net can be named in the hash as the pieces that were tapped, in order --
 // #what=net&net=0,0,1 -- so a particular one can be pointed at
+// a net can be named in the hash as the pieces that were tapped, in order,
+// with a c for the taps that added a cap -- #what=net&net=0,0c,1
 for (const at of (hash.get('net') || '').split(',')) {
-  const i = Number(at);
-  if (Number.isInteger(i) && i >= 0 && i < model.nodes.length) grow(model, i);
+  const i = Number(at.replace(/c$/, ''));
+  if (Number.isInteger(i) && i >= 0 && i < model.nodes.length) {
+    grow(model, i, at.endsWith('c') ? 'cap' : 'handle');
+  }
 }
 
 const want = hash.get('what');

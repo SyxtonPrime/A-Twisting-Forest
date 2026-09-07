@@ -21,7 +21,8 @@
 // does exactly the same tipping, which is why the two stay in step. A piece's
 // turn is applied about an axis that tips with them.
 
-import { buildPiece, piecePositions, pieceOverlay } from './piece.js';
+import { buildPiece, piecePositions, pieceOverlay, edgeFor } from './piece.js';
+import { buildCap, capPositions, capOverlay } from './cap.js';
 import { handleGluings } from '../handle.js';
 import { makeSmoother } from './smooth.js';
 import { phaseAt, THREE_ACT } from './roll.js';
@@ -34,14 +35,17 @@ const SAG = 3.0;                              // how far under the necks arch
 // ---- the tree ---------------------------------------------------------
 
 export function emptyNet() {
-  return { nodes: [{ nbrs: [] }] };
+  return { nodes: [{ kind: 'handle', nbrs: [] }] };
 }
 
-// Give a piece another neck, with a new handle on the end of it. The piece
-// gains a side; the new one is a pentagon, since it has exactly one neighbour.
-export function grow(net, at) {
+// Give a piece another neck, with something new on the end of it: another
+// handle, which adds one to the genus, or a cap, which closes the neck off and
+// adds nothing. Nothing can be hung off a cap, since a cap has the one rim it
+// arrived with and no way to grow another.
+export function grow(net, at, kind = 'handle') {
+  if (net.nodes[at].kind === 'cap') return -1;
   const id = net.nodes.length;
-  net.nodes.push({ nbrs: [at] });
+  net.nodes.push({ kind, nbrs: [at] });
   net.nodes[at].nbrs.push(id);
   return id;
 }
@@ -89,10 +93,14 @@ export function buildNet(net, opts = {}) {
   let V = 0;
   for (const v of order) {
     const k = net.nodes[v].nbrs.length;
-    const key = `${k}:${depth[v] % 2}`;
+    const cap = net.nodes[v].kind === 'cap';
+    const flip = depth[v] % 2 === 1;
+    const key = `${cap ? 'cap' : k}:${flip}`;
     if (!cache.has(key)) {
-      const piece = buildPiece({ nu, nv, hu, hv, R, r, rims: k, mirror: depth[v] % 2 === 1 });
-      cache.set(key, { piece, over: pieceOverlay(piece, { along: 12, across: 4 }) });
+      const piece = cap
+        ? buildCap({ edge: edgeFor(R, r), spokes: 2 * (hu + hv), mirror: flip })
+        : buildPiece({ nu, nv, hu, hv, R, r, rims: k, mirror: flip });
+      cache.set(key, { piece, over: cap ? capOverlay(piece) : pieceOverlay(piece, { along: 12, across: 4 }) });
     }
     const { piece, over } = cache.get(key);
     nodes[v] = { id: v, piece, over, offset: V, psi: 0, x: 0, y: 0,
@@ -157,17 +165,19 @@ export function buildNet(net, opts = {}) {
     for (let c = 0; c < 3; c++) { rgb[i * 3 + c] = FRONT[c]; backRGB[i * 3 + c] = BACK[c]; }
   }
 
+  // the genus is the number of handles: a cap closes a neck off and adds
+  // nothing, which is the whole point of having one
+  const handles = net.nodes.filter(nd => nd.kind !== 'cap').length;
   const mesh = { net, nodes, order, links, V, F, faces: fa, rgb, backRGB, seam: [],
-                 plan: THREE_ACT, R, r, gap, cache, genus: N };
+                 plan: THREE_ACT, R, r, gap, cache, genus: handles, caps: N - handles };
 
   // Where pieces are sewn together they meet at hard corners, and a hard
   // corner is what makes an assembled thing read as an assembly.
   const merge = [], seeds = [];
   for (const v of order) {
     const nd = nodes[v];
-    for (const [x, y] of handleGluings(nd.piece.h, false)) {
-      merge.push([x + nd.offset, y + nd.offset]);
-    }
+    const glued = nd.piece.kind === 'cap' ? nd.piece.glue : handleGluings(nd.piece.h, false);
+    for (const [x, y] of glued) merge.push([x + nd.offset, y + nd.offset]);
     for (const arc of nd.piece.rims) for (const x of arc) seeds.push(x + nd.offset);
   }
   mesh.smooth = seeds.length ? makeSmoother(mesh, { merge, seeds, reach: 4 }) : (p => p);
@@ -193,7 +203,9 @@ export function netPositions(mesh, t, opts = {}, out) {
 
   for (const v of order) {
     const nd = nodes[v];
-    nd.local = piecePositions(nd.piece, t, opts, nd.scratch);
+    nd.local = nd.piece.kind === 'cap'
+      ? capPositions(nd.piece, t, opts, nd.scratch)
+      : piecePositions(nd.piece, t, opts, nd.scratch);
     nd.ca = Math.cos(nd.psi); nd.sa = Math.sin(nd.psi);
     // where the middle of each of its rims has got to, in its own frame
     nd.mid = nd.piece.rims.map(arc => {

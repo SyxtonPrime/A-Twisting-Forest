@@ -201,9 +201,38 @@ branch. The rule is the whole of the bookkeeping:
 > a piece with `k` necks on it is a `(4 + k)`-gon.
 
 A lone square is a closed torus with nothing hanging off it; a pentagon has one
-neck; a hexagon two; a heptagon three. The genus is simply the number of
-pieces, since every one of them is a handle and the necks between them add
-nothing, so `χ = 2 − 2g` and the net you draw is the arithmetic.
+neck; a hexagon two; a heptagon three. The genus is the number of handles,
+since the necks between them add nothing, so `χ = 2 − 2g` and the net you draw
+is the arithmetic.
+
+### Caps
+
+The other kind of piece has genus nought: a **cap**, which closes a neck off
+and adds nothing to the world. Tapping switches between adding one of those and
+adding a handle, and the genus is the number of handles, so a net can be closed
+off without growing.
+
+A disc has no side to spare — its whole boundary is the rim — so it gets the
+same treatment the handle got. Cut a slit from the rim to the middle and open
+it out, and a disc with a radial slit is a **circular sector**, whose boundary
+reads round as `c s s⁻¹`: the outer arc is the rim, an unbroken arc of the
+boundary, and the two straight radii are the lips of the slit, glued back to
+each other.
+
+And then the roll comes out *better* than the handle's does. Rolling a sector
+up until its two radii meet gives a cone, and that is an honest bend the whole
+way — a cone is developable, so no length in the paper changes and there is
+nothing to apologise for. Only the second act, rounding the cone off into a
+ball, has to stretch, and for the same reason as always: a sphere has curvature
+and a cone has none.
+
+A cap has an act zero too, for the same reason a handle does. Its rim is an
+*arc* and a handle's rim side is straight, so a neck sewn between the two would
+flare. The drawing that lies down neatly beside its neighbours is a triangle,
+apex in the middle and the rim its base; the drawing that bends up honestly is
+the sector. They have the same area — a triangle on the same base with height
+equal to the sector's radius does — so act zero only bows the base out, and
+does not have to stretch the paper to do it.
 
 **Every other piece is built as a mirror image.** That is not decoration. Two
 holes that face each other agree about the way round the tube and disagree
@@ -293,6 +322,7 @@ later, and the smoothing pass is chosen to preserve it.
 - `src/roll/piece.js` — one handle: the pentagon and the developed rectangle as
   two drawings of the same grid, the flat morph between them, and Tutte's
   embedding for the pentagon.
+- `src/roll/cap.js` — the cap: a sector that rolls into a cone and then a ball.
 - `src/roll/net.js` — the net: the tree, the pieces that make it, where they
   are put, and the necks between them.
 - `src/roll/smooth.js` — the smoothing pass: Taubin, on the quotient, weighted

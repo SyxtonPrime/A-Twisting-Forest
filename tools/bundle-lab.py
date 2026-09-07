@@ -19,13 +19,14 @@ MODULES = [
     ('roll', 'src/roll/roll.js'),
     ('smooth', 'src/roll/smooth.js'),
     ('sheet', 'src/roll/sheet.js'),
+    ('cap', 'src/roll/cap.js'),
     ('piece', 'src/roll/piece.js'),
     ('net', 'src/roll/net.js'),
     ('lab', 'src/roll/lab.js'),
 ]
 KEY = {'world.js': 'world', 'scene3d.js': 'scene3d', 'handle.js': 'handle',
        'roll.js': 'roll', 'smooth.js': 'smooth', 'sheet.js': 'sheet',
-       'piece.js': 'piece', 'net.js': 'net'}
+       'piece.js': 'piece', 'net.js': 'net', 'cap.js': 'cap'}
 
 IMPORT = re.compile(r"^import\s*\{([^}]*)\}\s*from\s*'([^']+)';\s*$", re.M)
 EXPORT = re.compile(r"^export\s+(function|const|class|let)\s+([A-Za-z_$][\w$]*)", re.M)

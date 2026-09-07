@@ -104,8 +104,11 @@ body.workshop { overflow: hidden; }
 #lab-controls label { display: block; margin-bottom: 6px; }
 #lab-controls label b { float: right; color: var(--faint); font-weight: normal; }
 #lab-controls input[type=range] { width: 100%; accent-color: var(--ink); }
-#lab-controls .buttons { display: flex; gap: 8px; margin-bottom: 22px; }
+#lab-controls .buttons { display: flex; gap: 8px; margin-bottom: 10px; }
+#lab-controls .ctl > .buttons:last-child { margin-bottom: 0; }
+#lab-controls #shape { text-align: left; margin: 0 0 10px; }
 #lab-controls .buttons button { flex: 1; }
+#lab-controls .buttons button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 #lab-controls .toggles { display: flex; gap: 18px; }
 #lab-controls .toggles label { display: flex; align-items: center; gap: 6px; margin: 0; }
 #lab-controls .notes { border-top: 1px solid var(--rule); padding-top: 16px;

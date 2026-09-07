@@ -74,9 +74,7 @@ export function buildPiece(opts = {}) {
   // hole is the same size, and two rim sides sewn to the same neck have to be
   // the same length or the neck comes out a trapezium. The length is the one
   // that makes a pentagon about as much paper as the sheet it stands for.
-  const area = 4 * Math.PI * Math.PI * R * r;
-  const edge = Math.sqrt(area / 1.7205);
-  const rad = edge / (2 * Math.sin(Math.PI / n));
+  const rad = edgeFor(R, r) / (2 * Math.sin(Math.PI / n));
 
   // Where each hole goes round the ring. The flat drawing and the finished
   // torus have to agree about which way a rim faces, and they do exactly when
@@ -189,7 +187,7 @@ export function buildPiece(opts = {}) {
     return far;
   });
 
-  return { h, nu, nv, hu, hv, R, r, k, n, V, F, faces, rgb, backRGB, seam: [],
+  return { kind: 'handle', h, nu, nv, hu, hv, R, r, k, n, V, F, faces, rgb, backRGB, seam: [],
            dev, pent: flat, corners: P, rims, rimDir, rimReach, behind, edge: edge2, sides, mirror,
            plan: THREE_ACT, side: -1 };
 }
@@ -208,6 +206,14 @@ function seamGap(angles) {
 }
 
 const wrap = a => ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+// The side every polygon is drawn with, whatever its number of sides, and the
+// length of every rim: it is the one that makes a pentagon about as much paper
+// as the sheet it stands for. A cap has to know it too, since its rim is sewn
+// to the same necks.
+export function edgeFor(R, r) {
+  return Math.sqrt((4 * Math.PI * Math.PI * R * r) / 1.7205);
+}
 
 // Where every vertex is at time t: the flat drawing interpolated by act zero,
 // then bent by acts one and two. Because acts one and two are the identity

@@ -1057,7 +1057,10 @@ test('piece: act zero is flat, and does not start until the piece is drawn', () 
 const SMALL = { nu: 12, nv: 36, hu: 3, hv: 3, R: 3, r: 1 };
 function netOf(...growAt) {
   const n = emptyNet();
-  for (const at of growAt) grow(n, at);
+  for (const at of growAt) {
+    const cap = typeof at === 'string';
+    grow(n, Number(cap ? at.replace('c', '') : at), cap ? 'cap' : 'handle');
+  }
   return buildNet(n, { ...SMALL, cache: new Map() });
 }
 
@@ -1145,6 +1148,63 @@ test('net: smoothing the joins does not pull the surface apart at a seam', () =>
       const d = Math.hypot(up[a] - up[b], up[a + 1] - up[b + 1], up[a + 2] - up[b + 2]);
       ok(d < 1e-3, `piece ${v}: glued pair ${x},${y} is still one point: ${d}`);
     }
+  }
+});
+
+test('cap: a sector rolls into a cone without changing a length in it', () => {
+  const mesh = netOf('0c');
+  const cap = mesh.nodes[1].piece;
+  eq(cap.kind, 'cap');
+  eq(mesh.genus, 1, 'a cap adds nothing to the genus');
+  eq(mesh.caps, 1);
+  // act one is a bend: from the moment the piece is a sector, the distance
+  // from the apex out to the rim is its slant at every point of it, whether it
+  // is still open or rolled up into the cone
+  const from = netPositions(mesh, 0.30), to = netPositions(mesh, 0.68);
+  const o = mesh.nodes[1].offset;
+  for (let i = 0; i <= cap.spokes; i++) {
+    for (const [pos, when] of [[from, 'open'], [to, 'rolled']]) {
+      const a = (o + cap.id(i, 0)) * 3, b = (o + cap.id(i, cap.rings)) * 3;
+      const d = Math.hypot(pos[a] - pos[b], pos[a + 1] - pos[b + 1], pos[a + 2] - pos[b + 2]);
+      ok(Math.abs(d - cap.slant) < 1e-3, `spoke ${i} is the slant when ${when}: ${d.toFixed(3)}`);
+    }
+  }
+  // and the two lips of the slit have come together
+  for (let j = 0; j <= cap.rings; j++) {
+    const a = (o + cap.id(0, j)) * 3, b = (o + cap.id(cap.spokes, j)) * 3;
+    ok(Math.hypot(to[a] - to[b], to[a + 1] - to[b + 1], to[a + 2] - to[b + 2]) < 1e-3,
+       `lip ${j} is glued`);
+  }
+});
+
+test('cap: its rim matches a handle, so the neck is still a rectangle', () => {
+  const mesh = netOf(0, '0c', '1c');
+  const flat = netPositions(mesh, 0);
+  for (const link of mesh.links) {
+    const near = link.cols[0], far = link.cols[link.cols.length - 1];
+    eq(near.length, far.length, 'the two rims have the same number of vertices');
+    let lo = Infinity, hi = 0;
+    for (let k = 0; k < link.m; k++) {
+      const a = near[k] * 3, b = far[k] * 3;
+      const d = Math.hypot(flat[a] - flat[b], flat[a + 1] - flat[b + 1]);
+      lo = Math.min(lo, d); hi = Math.max(hi, d);
+    }
+    ok(hi / lo < 1.15, `neck ${link.a}-${link.b} is a rectangle: ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
+  }
+  // rolled, the cap closes the neck off: it is a ball on the end of it
+  const up = netPositions(mesh, 1);
+  for (const v of mesh.order) {
+    const nd = mesh.nodes[v];
+    if (nd.piece.kind !== 'cap') continue;
+    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < nd.piece.V; i++) {
+      for (let c = 0; c < 3; c++) {
+        const x = up[(nd.offset + i) * 3 + c];
+        lo[c] = Math.min(lo[c], x); hi[c] = Math.max(hi[c], x);
+      }
+    }
+    const w = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+    ok(w > 2 * nd.piece.rho && w < 6 * nd.piece.rho, `cap ${v} is a ball ${w.toFixed(2)} across`);
   }
 });
 
