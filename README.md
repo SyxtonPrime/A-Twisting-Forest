@@ -192,83 +192,60 @@ plane, so nothing passes through a shape that is not a surface. Switch act zero
 off and the piece starts already developed, and every frame after that is a
 genuine bend.
 
-### Two pentagons and a neck
+### A net you build
 
-Genus two, as one net: two pentagons sewn to a rectangle along their rim sides.
+The workshop's third piece is not a piece but an editor. Tap a handle and it
+grows a side, a neck, and another handle on the end of the neck, so nets
+branch. The rule is the whole of the bookkeeping:
 
-Act zero is where the price gets paid in public. As each rim sinks into its
-sheet, the neck has nowhere flat left to be attached, so it lifts off the page
-and arches under. That is not a cheat being covered up — it is the difference
-between the two drawings, made visible.
+> a piece with `k` necks on it is a `(4 + k)`-gon.
 
-### Making it look like one thing
+A lone square is a closed torus with nothing hanging off it; a pentagon has one
+neck; a hexagon two; a heptagon three. The genus is simply the number of
+pieces, since every one of them is a handle and the necks between them add
+nothing, so `χ = 2 − 2g` and the net you draw is the arithmetic.
 
-Four things, none of which change what the surface is.
+**Every other piece is built as a mirror image.** That is not decoration. Two
+holes that face each other agree about the way round the tube and disagree
+about the way round the ring, so a piece merely *turned round* has its rim
+matched to its neighbour's by a mirror in one coordinate — which sends the
+slit's cut point to the opposite corner of the hole and leaves the neck folded
+back on itself in the flat drawing. Reflecting alternate pieces makes every
+match the identity, and a tree is always two-colourable, so it always works.
 
-**The hole is a disc.** It is cut out of a grid, so it starts life a rectangle
-of cells. Its rim is moved onto a circle and the grid eased out to a few hole
-widths around it, placing each rim vertex by how far it is round the
-rectangle's perimeter rather than by which way it lies from the centre — going
-by direction bunches them at the corners. The easing is clamped so it never
-reaches the edges of the sheet, since those are glued to each other and moving
-one side by an amount the other is not opens the surface along the seam.
+**Pieces are placed by their rims, not by their middles.** A piece rolls up
+about the middle of its own sheet, and the torus it ends as does not sit at
+that point — it sits a ring radius away from it — so there is no one place in a
+piece that means the same thing all the way through the roll. The middle of a
+rim always means the mouth of the neck that hangs off it, which is exactly what
+has to line up.
 
-**The coloured edges go.** An edge is coloured because it is going to be glued
-to another one, so once it has been there is nothing left to say. Each pair
-fades over the end of the act that closes it, leaving the plain grid line that
-was under it, and the finished surface has no seams drawn on it at all.
+**Every polygon is drawn with the same side length**, whatever its number of
+sides. It has to be: a rim side stands for the circle round a hole, every hole
+is the same size, and two rim sides sewn to the same neck must be the same
+length or the neck comes out a trapezium.
 
-**The joins are smoothed.** Three pieces sewn together meet at hard corners,
-and a hard corner is what makes an assembled thing read as an assembly. A few
-rounds of Taubin smoothing — Taubin rather than plain Laplacian, which shrinks
-whatever it touches — are seeded at the two joins and die away four cells into
-each piece. It runs on the quotient, so glued vertices are one vertex and the
-cut mesh is not pulled apart along its seams, and it is weighted to nothing
-everywhere else, so the grid stays crisp and the seams that have not closed yet
-are never averaged across.
+**Flat, the pieces lie in the page; rolled, the tori lie in the plane you look
+down on.** Those are two different planes, so the whole arrangement tips from
+one to the other as the rings close — and a piece's own turn tips with it,
+about the up axis while the net is flat and about the axis of the finished tori
+once it is not. That is the same tipping each piece's roll does anyway, which
+is why the two stay in step.
 
-**The grid looks like a grid.** Four things were wringing it round. The layout
-was Tutte's embedding, which is a harmonic map, and what a harmonic map
-minimises is the Dirichlet energy — not the same thing as looking right. Going
-from a sheet three times longer than it is deep onto a pentagon, it wrings the
-grid round in a spiral to make up the difference, and the spiral is the
-waviness. What is wanted is the drawing in which each cell is as close as it
-can be to the cell of the developed sheet it came from — turned and moved, but
-not sheared and not stretched — so the layout is now relaxed **as rigid as
-possible** against the developed rectangle, starting from Tutte because Tutte
-cannot fold and so is a safe place to begin. Guess a turn for each cell, solve
-for the vertices that best fit those turns, repeat; in two dimensions the turn
-is one arctangent rather than a decomposition. The distortion does not go away,
-since the boundary is pinned to a pentagon and the sheet is a rectangle, but it
-comes out as an even lean instead of a few swirls, and a grid that leans is far
-easier to read than a grid that curls. The pentagon was also regular, as tall
-as it is wide; it is now stretched a little towards the sheet's own
-proportions, area kept. The two lips of the slit were being given a fair share
-of the pentagon's perimeter by arc length, but in the developed sheet the slit
-has no width at all, so a sliver of nothing had to fill a large piece of the
-drawing; they are pinned close to the ends of the rim instead. And a grid line
-crossing the slit's mouth meets two vertices there, not one — the two lips,
-which are the same point of the surface but are yards apart in the flat drawing
-— so drawing straight through put a line clean across the piece that was not an
-edge of anything.
+Three things had to be got exactly right, and each was invisible until it was
+not:
 
-The right-hand handle is built as a **mirror image** of the left, not as a copy
-turned round, and that is what makes the neck a rectangle.
-
-Two holes that face each other agree about the way round the tube and disagree
-about the way round the ring. So if the second handle is merely turned round,
-the two rims are matched by a mirror in one coordinate only — and that sends
-the slit's cut point to the opposite corner of the hole. In space the rim is a
-closed circle, so a rotation of it never shows and the tube looks fine. Flat, a
-rim is pinned as an arc with its cut at the two ends of a pentagon side, so the
-far edge of the neck folds back on itself and the neck stops being a rectangle
-at all.
-
-Reflect the piece instead and the two holes have the same local axes. The rims
-match index for index, cut lands on cut, and the neck runs straight in both
-drawings. There are tests that every ruled line of the neck is about the same
-length in space, that flat every one of them is level and the two rims run the
-same way, and that the neck's cells come out roughly square.
+- The boundary walk meets the rims in *descending* order. With one rim or two
+  that is indistinguishable from ascending — a step of one is a step of one
+  whichever way round two things are — so guessing wrong there laid every rim
+  of a pentagon along its side backwards and folded the necks into bowties, but
+  only once a piece with three rims existed to show it.
+- The developed sheet runs from `−πR` to `+πR`, so the row a hole sits on is
+  half a ring away from the angle it stands at. Leaving that half turn out puts
+  every neighbour on the wrong side of its parent, which is invisible flat and
+  folds the whole thing into itself the moment the rings close.
+- A piece's `side` — the length of a polygon side — and its `side` — which way
+  act two bends — are not the same thing, and one of them silently won.
 
 ## Where this is going
 
@@ -316,7 +293,8 @@ later, and the smoothing pass is chosen to preserve it.
 - `src/roll/piece.js` — one handle: the pentagon and the developed rectangle as
   two drawings of the same grid, the flat morph between them, and Tutte's
   embedding for the pentagon.
-- `src/roll/chain.js` — two handles and the neck between them, as one mesh.
+- `src/roll/net.js` — the net: the tree, the pieces that make it, where they
+  are put, and the necks between them.
 - `src/roll/smooth.js` — the smoothing pass: Taubin, on the quotient, weighted
   to nothing away from the joins.
 - `tools/bundle-lab.py` — folds the workshop into one self-contained file, for

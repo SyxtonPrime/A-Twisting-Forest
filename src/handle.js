@@ -53,9 +53,12 @@ export function buildHandle(opts = {}) {
   // side of the torus that faces the neighbour it is joined to -- so it can be
   // said.
   const v0 = opts.v0 === undefined ? 1 : opts.v0;
-  const holes = [];
-  if (rims >= 1) holes.push({ u0, v0 });
-  if (rims >= 2) holes.push({ u0, v0: v0 + Math.round(nv / 2) });
+  // `rows` says where every hole goes and there may be any number of them,
+  // which is what a piece in the middle of a tree needs. Without it the old
+  // one or two, evenly placed.
+  const rows = opts.rows || (rims >= 2 ? [v0, v0 + Math.round(nv / 2)]
+                           : rims >= 1 ? [v0] : []);
+  const holes = rows.map(r => ({ u0, v0: r }));
 
   const slitRow = new Map(holes.map(h => [h.v0, h]));
   const inHole = (u, v) => holes.some(h => u > h.u0 && u < h.u0 + hu && v > h.v0 && v < h.v0 + hv);
@@ -108,8 +111,8 @@ export function buildHandle(opts = {}) {
     solid[i * 3 + 2] = rad * Math.sin(b);
   }
 
-  return { nu, nv, hu, hv, R, r, rims, holes, uv, faces, solid, at, lower, aOff, bOff,
-           V: uv.length, F: faces.length };
+  return { nu, nv, hu, hv, R, r, rims: holes.length, holes, uv, faces, solid, at, lower,
+           aOff, bOff, V: uv.length, F: faces.length };
 }
 
 // Which vertices are glued to which once it is rolled up: the far edges back

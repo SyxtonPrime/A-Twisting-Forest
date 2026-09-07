@@ -8,7 +8,7 @@ import { mulberry32 } from '../src/rng.js';
 import { rollPoint, phaseAt, CURL_END, RING_START } from '../src/roll/roll.js';
 import { buildSheet, sheetPositions } from '../src/roll/sheet.js';
 import { buildPiece, piecePositions, boundaryOf } from '../src/roll/piece.js';
-import { buildChain as buildRollChain, chainPositions as rollChainPositions } from '../src/roll/chain.js';
+import { emptyNet, grow, buildNet, netPositions } from '../src/roll/net.js';
 import { rimArc } from '../src/handle.js';
 
 const results = [];
@@ -1052,80 +1052,100 @@ test('piece: act zero is flat, and does not start until the piece is drawn', () 
   ok(Math.abs(2 * h - 2 * Math.PI * PIECE.r) < 1e-3, 'developed to 2pir across');
 });
 
-// ---- two pentagons and a neck -----------------------------------------
+// ---- a net of handles ---------------------------------------------------
 
-test('pair: the neck runs straight, and does not come out with a twist in it', () => {
-  const chain = buildRollChain({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1 });
-  const up = rollChainPositions(chain, 1);
-  const near = chain.cols[0], far = chain.cols[chain.cols.length - 1];
-  // Every ruled line of the neck joins a point of one rim to the point of the
-  // other that faces it, so they all have about the same length. Matching the
-  // rims the wrong way round shears the neck, and the lines fan out instead.
-  let lo = Infinity, hi = 0;
-  for (let k = 0; k < chain.m; k++) {
-    const a = near[k] * 3, b = far[k] * 3;
-    const d = Math.hypot(up[a] - up[b], up[a + 1] - up[b + 1], up[a + 2] - up[b + 2]);
-    lo = Math.min(lo, d); hi = Math.max(hi, d);
-  }
-  ok(hi / lo < 1.35, `the neck is not sheared: lengths ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
+const SMALL = { nu: 12, nv: 36, hu: 3, hv: 3, R: 3, r: 1 };
+function netOf(...growAt) {
+  const n = emptyNet();
+  for (const at of growAt) grow(n, at);
+  return buildNet(n, { ...SMALL, cache: new Map() });
+}
 
-  // and the two rims really are facing each other, one on each side
-  let leftX = 0, rightX = 0;
-  for (let k = 0; k < chain.m; k++) { leftX += up[near[k] * 3]; rightX += up[far[k] * 3]; }
-  ok(leftX / chain.m < 0 && rightX / chain.m > 0, 'the neck spans from one handle to the other');
+test('net: a piece has four sides more than it has neighbours', () => {
+  eq(netOf().nodes[0].piece.n, 4, 'on its own it is a closed torus');
+  const pair = netOf(0);
+  eq(pair.nodes.map(x => x.piece.n), [5, 5], 'two handles are two pentagons');
+  const three = netOf(0, 0);
+  eq(three.nodes.map(x => x.piece.n), [6, 5, 5], 'a middle handle is a hexagon');
+  const four = netOf(0, 0, 0);
+  eq(four.nodes[0].piece.n, 7, 'three necks on one handle is a heptagon');
+  eq(four.genus, 4, 'the genus is the number of pieces');
 });
 
-test('pair: flat it is one connected piece, and the neck reaches both rims', () => {
-  const chain = buildRollChain({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1 });
-  const flat = rollChainPositions(chain, 0);
-  for (let i = 0; i < chain.V; i++) ok(Math.abs(flat[i * 3 + 2]) < 1e-6, 'the whole net lies in a plane');
-  // the two pentagons do not sit on top of each other
-  const p0 = chain.pieces[0], p1 = chain.pieces[1];
-  let max0 = -Infinity, min1 = Infinity;
-  for (let v = 0; v < p0.V; v++) max0 = Math.max(max0, flat[(chain.offset[0] + v) * 3]);
-  for (let v = 0; v < p1.V; v++) min1 = Math.min(min1, flat[(chain.offset[1] + v) * 3]);
-  ok(max0 <= min1 + 1e-6, `the two pentagons do not overlap: ${max0} then ${min1}`);
-  // and the neck bridges exactly the gap between their rim sides
-  const near = chain.cols[0], far = chain.cols[chain.cols.length - 1];
-  for (let k = 0; k < chain.m; k++) {
-    ok(Math.abs(flat[near[k] * 3] - max0) < 1e-3, 'the near end of the neck is on the left rim side');
-    ok(Math.abs(flat[far[k] * 3] - min1) < 1e-3, 'the far end is on the right rim side');
-  }
-});
-
-test('pair: flat, the neck is a rectangle and its grid is square', () => {
-  const chain = buildRollChain({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1 });
-  const flat = rollChainPositions(chain, 0);
-  const near = chain.cols[0], far = chain.cols[chain.cols.length - 1];
-  // every ruled line runs straight across: same height at both ends
-  for (let k = 0; k < chain.m; k++) {
-    const dy = Math.abs(flat[near[k] * 3 + 1] - flat[far[k] * 3 + 1]);
-    ok(dy < 1e-3, `line ${k} of the neck is level: off by ${dy}`);
-  }
-  // the two rims run the same way, not one of them folded back
-  for (let k = 0; k + 1 < chain.m; k++) {
-    const a = flat[near[k + 1] * 3 + 1] - flat[near[k] * 3 + 1];
-    const b = flat[far[k + 1] * 3 + 1] - flat[far[k] * 3 + 1];
-    ok(a * b > 0, `step ${k} goes the same way on both rims`);
-  }
-  // and the cells are not far off square
-  const last = chain.cols.length - 1;
-  const along = Math.abs(flat[far[0] * 3] - flat[near[0] * 3]) / last;
-  const across = Math.abs(flat[near[chain.m - 1] * 3 + 1] - flat[near[0] * 3 + 1]) / (chain.m - 1);
-  ok(along / across > 0.6 && along / across < 1.7, `cells are squarish: ${(along / across).toFixed(2)}`);
-});
-
-test('pair: smoothing the joins does not pull the surface apart at a seam', () => {
-  const chain = buildRollChain({ nu: 16, nv: 48, hu: 4, hv: 4, R: 3, r: 1 });
-  const up = rollChainPositions(chain, 1);
-  chain.pieces.forEach((p, i) => {
-    const o = chain.offset[i];
-    for (const [x, y] of handleGluings(p.h, false)) {
-      const a = (x + o) * 3, b = (y + o) * 3;
-      const d = Math.hypot(up[a] - up[b], up[a + 1] - up[b + 1], up[a + 2] - up[b + 2]);
-      ok(d < 1e-3, `piece ${i}: glued pair ${x},${y} is still one point after smoothing: ${d}`);
+test('net: every piece rolls up onto its own torus, wherever it is put', () => {
+  const mesh = netOf(0, 0);
+  const up = netPositions(mesh, 1);
+  const R = mesh.R, r = mesh.r;
+  for (const v of mesh.order) {
+    const nd = mesh.nodes[v];
+    // the tori all lie in one plane, so a piece's own centre is found from the
+    // vertices that are furthest apart on it
+    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < nd.piece.V; i++) {
+      for (let c = 0; c < 3; c++) {
+        const x = up[(nd.offset + i) * 3 + c];
+        lo[c] = Math.min(lo[c], x); hi[c] = Math.max(hi[c], x);
+      }
     }
-  });
+    const w = hi[0] - lo[0], h = hi[2] - lo[2], tall = hi[1] - lo[1];
+    ok(Math.abs(w - 2 * (R + r)) < 0.6 && Math.abs(h - 2 * (R + r)) < 0.6,
+       `piece ${v} is a torus ${2 * (R + r)} across: got ${w.toFixed(2)} by ${h.toFixed(2)}`);
+    ok(Math.abs(tall - 2 * r) < 0.5, `piece ${v} is ${2 * r} tall: got ${tall.toFixed(2)}`);
+  }
+});
+
+test('net: flat it is one connected piece, and every neck is a rectangle', () => {
+  const mesh = netOf(0, 0, 1);
+  const flat = netPositions(mesh, 0);
+  for (let i = 0; i < mesh.V; i++) ok(Math.abs(flat[i * 3 + 2]) < 1e-5, 'the whole net lies in a plane');
+  for (const link of mesh.links) {
+    const near = link.cols[0], far = link.cols[link.cols.length - 1];
+    // a neck is a rectangle: every ruled line across it is the same length,
+    // and the two rims it joins run the same way
+    let lo = Infinity, hi = 0;
+    for (let k = 0; k < link.m; k++) {
+      const a = near[k] * 3, b = far[k] * 3;
+      lo = Math.min(lo, Math.hypot(flat[a] - flat[b], flat[a + 1] - flat[b + 1]));
+      hi = Math.max(hi, Math.hypot(flat[a] - flat[b], flat[a + 1] - flat[b + 1]));
+    }
+    ok(hi / lo < 1.15, `neck ${link.a}-${link.b} is a rectangle: ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
+  }
+});
+
+test('net: no piece sits on top of another, flat or rolled', () => {
+  for (const mesh of [netOf(0, 0, 0), netOf(0, 1, 2)]) {
+    for (const t of [0, 0.3, 1]) {
+      const pos = netPositions(mesh, t);
+      const mid = mesh.order.map(v => {
+        const nd = mesh.nodes[v];
+        let x = 0, y = 0, z = 0;
+        for (let i = 0; i < nd.piece.V; i++) {
+          const o = (nd.offset + i) * 3;
+          x += pos[o]; y += pos[o + 1]; z += pos[o + 2];
+        }
+        return [x / nd.piece.V, y / nd.piece.V, z / nd.piece.V];
+      });
+      for (let i = 0; i < mid.length; i++) {
+        for (let j = i + 1; j < mid.length; j++) {
+          const d = Math.hypot(mid[i][0] - mid[j][0], mid[i][1] - mid[j][1], mid[i][2] - mid[j][2]);
+          ok(d > 2 * mesh.r, `t=${t}: pieces ${i} and ${j} are ${d.toFixed(2)} apart`);
+        }
+      }
+    }
+  }
+});
+
+test('net: smoothing the joins does not pull the surface apart at a seam', () => {
+  const mesh = netOf(0, 0);
+  const up = netPositions(mesh, 1);
+  for (const v of mesh.order) {
+    const nd = mesh.nodes[v];
+    for (const [x, y] of handleGluings(nd.piece.h, false)) {
+      const a = (x + nd.offset) * 3, b = (y + nd.offset) * 3;
+      const d = Math.hypot(up[a] - up[b], up[a + 1] - up[b + 1], up[a + 2] - up[b + 2]);
+      ok(d < 1e-3, `piece ${v}: glued pair ${x},${y} is still one point: ${d}`);
+    }
+  }
 });
 
 // ---- the report ------------------------------------------------------

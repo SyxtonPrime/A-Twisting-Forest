@@ -5,7 +5,7 @@
 import { Solid } from '../scene3d.js';
 import { buildSheet, sheetPositions, sheetOverlay } from './sheet.js';
 import { buildPiece, piecePositions, pieceOverlay } from './piece.js';
-import { buildChain, chainPositions, chainOverlay } from './chain.js';
+import { emptyNet, grow, prune, canPrune, buildNet, netPositions, netOverlay, pieceAt } from './net.js';
 import { phaseAt, actName, TWO_ACT, THREE_ACT } from './roll.js';
 
 const $ = id => document.getElementById(id);
@@ -91,28 +91,30 @@ const SPECIMENS = {
       };
     },
   },
-  pair: {
-    label: 'two pentagons and a neck → a two-holed torus',
-    title: 'two pentagons and a neck',
-    marks: ['the net', 'developed', 'two tubes', 'genus two'],
+  net: {
+    label: 'a net you build',
+    title: 'a net you build',
+    marks: ['the net', 'developed', 'tubes', 'the surface'],
     cam: ALONG,
-    note: `<p>Two pentagons sewn to a rectangle along their rim sides. Flat it is
-      one connected piece, which is the whole reason the rim has to be a whole
-      side: a rectangle can be sewn to a side, and it cannot be sewn to a circle
-      in the middle of a sheet.</p>
-    <p>Which is exactly what act zero takes away. As each rim sinks into its
-      sheet the neck has nowhere flat left to be attached, so it lifts off the
-      page and arches under. That is not a cheat being covered up; it is the
-      difference between the two drawings, made visible.</p>
-    <p>The far rim is walked the other way round, so the two ends of the neck
-      agree about which side is out. Walk them the same way and the neck comes
-      out with a half turn in it, which would be a Klein bottle by accident.</p>`,
+    note: `<p><b>Tap a piece</b> and it grows a side, a neck, and another handle
+      on the end of it. A piece with <i>k</i> necks on it is a
+      (4&nbsp;+&nbsp;<i>k</i>)-gon, so the number of sides is the number of
+      neighbours plus four: a lone square is a closed torus, a pentagon has one
+      neck, a hexagon two.</p>
+    <p>The genus is just the number of pieces, because every one of them is a
+      handle and the necks between them add nothing. So &chi; = 2 &minus; 2g,
+      and the net you draw is the whole of the arithmetic.</p>
+    <p>Flat, the pieces lie in the page. Rolled, the tori lie in the plane you
+      are looking down on. Those are two different planes, so the whole
+      arrangement tips from one to the other as the rings close &mdash; which
+      is the same tipping each piece's own roll does, which is why they stay in
+      step.</p>`,
     build() {
-      const chain = buildChain({ nu: 20, nv: 60, hu: 5, hv: 5, R: 3, r: 1 });
+      const mesh = buildNet(model, { cache: pieceCache });
       return {
-        mesh: chain, plan: chain.plan, actZero: true,
-        over: chainOverlay(chain, { along: 12, across: 5 }),
-        at: (t, s, out) => chainPositions(chain, t, s, out),
+        mesh, plan: mesh.plan, actZero: true, net: mesh,
+        over: netOverlay(mesh),
+        at: (t, s2, out) => netPositions(mesh, t, s2, out),
       };
     },
   },
@@ -120,6 +122,11 @@ const SPECIMENS = {
 
 const state = { t: 0, playing: false, dir: 1, R: 3, r: 1, grid: true, edges: true,
                 kind: 'rectangle', zero: true };
+// The net being drawn, and the handles already worked out. Every piece with
+// the same number of necks and the same handedness is the same piece, so one
+// of each is built and the rest are placings of it.
+const model = emptyNet();
+const pieceCache = new Map();
 let spec = SPECIMENS.rectangle.build();
 let solid = new Solid($('rollcanvas'), spec.mesh, spec.at(0, state));
 solid.showSeams = false;                     // no mesh here carries a seam list
@@ -176,6 +183,13 @@ function apply() {
   $('roll-act').textContent = actName(state.t, p, rests());
   $('t-out').textContent = state.t.toFixed(2);
   $('play').textContent = state.playing ? 'pause' : state.t >= 1 ? 'lay it flat' : 'roll it up';
+  const editing = state.kind === 'net';
+  $('edit').hidden = !editing;
+  if (editing) {
+    const g = model.nodes.length;
+    $('shape').textContent = `${g} handle${g === 1 ? '' : 's'} — genus ${g}, χ = ${2 - 2 * g}`;
+    $('prune').disabled = g < 2;
+  }
 }
 
 // An edge is coloured because it is going to be glued to another one, so once
@@ -315,6 +329,45 @@ $('grid').onchange = e => { state.grid = e.target.checked; };
 $('edges').onchange = e => { state.edges = e.target.checked; };
 $('zero').onchange = e => { state.zero = e.target.checked; ticks(); };
 $('recentre').onclick = () => { solid.autoSpin = true; solid.zoom = 1; };
+$('prune').onclick = () => {
+  for (let i = model.nodes.length - 1; i >= 0; i--) {
+    if (canPrune(model, i)) { prune(model, i); rebuild(); return; }
+  }
+};
+$('clear').onclick = () => {
+  model.nodes = [{ nbrs: [] }];
+  rebuild();
+};
+
+// Rebuild the net, but keep where we are on the timeline and where the camera
+// is: editing while it is half rolled up should not throw you back to the
+// start of the roll.
+function rebuild() {
+  const keep = { t: state.t, az: solid.az, el: solid.el, spin: solid.autoSpin, zoom: solid.zoom };
+  setSpecimen('net');
+  state.t = keep.t;
+  solid.autoSpin = keep.spin; solid.az = keep.az; solid.el = keep.el; solid.zoom = keep.zoom;
+}
+
+// A tap on a piece grows it. A drag is the camera, so a pointer that moved is
+// not a tap, and on a phone there is nothing else to go on.
+{
+  const c = $('rollcanvas');
+  let from = null;
+  c.addEventListener('pointerdown', e => { from = [e.clientX, e.clientY, performance.now()]; });
+  c.addEventListener('pointerup', e => {
+    if (!from || state.kind !== 'net' || !solid.cam) { from = null; return; }
+    const moved = Math.hypot(e.clientX - from[0], e.clientY - from[1]);
+    const held = performance.now() - from[2];
+    from = null;
+    if (moved > 8 || held > 700 || model.nodes.length >= 8) return;
+    const box = c.getBoundingClientRect();
+    const sx = (e.clientX - box.left) * (solid.w / box.width);
+    const sy = (e.clientY - box.top) * (solid.h / box.height);
+    const at = pieceAt(spec.mesh, solid.pos, sx, sy, (x, y, z) => solid.point(solid.cam, x, y, z));
+    if (at >= 0) { grow(model, at); rebuild(); }
+  });
+}
 $('specimen').onchange = e => { state.t = 0; state.dir = 1; state.playing = false; setSpecimen(e.target.value); };
 
 document.addEventListener('keydown', e => {
@@ -344,6 +397,13 @@ for (const [k, v] of Object.entries(SPECIMENS)) {
   o.value = k; o.textContent = v.label;
   $('specimen').appendChild(o);
 }
+// a net can be named in the hash as the pieces that were tapped, in order --
+// #what=net&net=0,0,1 -- so a particular one can be pointed at
+for (const at of (hash.get('net') || '').split(',')) {
+  const i = Number(at);
+  if (Number.isInteger(i) && i >= 0 && i < model.nodes.length) grow(model, i);
+}
+
 const want = hash.get('what');
 $('specimen').value = SPECIMENS[want] ? want : 'rectangle';
 setSpecimen($('specimen').value);
