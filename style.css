@@ -80,3 +80,50 @@ button:hover .key, button:active .key { color: var(--paper); }
   #overlay { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 18px;
     padding: 16px; padding-bottom: calc(16px + var(--safe)); }
 }
+
+/* ---- the workshop ---------------------------------------------------- */
+
+#tabs { display: flex; gap: 18px; padding: 14px 24px; border-bottom: 1px solid var(--rule); }
+#tabs a { color: var(--faint); text-decoration: none; padding-bottom: 2px; }
+#tabs a:hover { color: var(--ink); }
+#tabs a[aria-current="page"] { color: var(--ink); border-bottom: 1px solid var(--ink); }
+#side .tab { display: block; margin-top: 18px; text-align: center; }
+#side .tab a { color: var(--faint); }
+
+body.workshop { overflow: hidden; }
+#lab { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px;
+  padding: 24px; height: calc(100vh - 50px); }
+#lab-stage { min-width: 0; display: grid; place-items: center;
+  border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+#rollcanvas { display: block; touch-action: none; cursor: grab; }
+#rollcanvas:active { cursor: grabbing; }
+#lab-controls { overflow-y: auto; }
+#lab-controls h1 { font-size: 14px; margin: 0 0 10px; }
+#lab-controls .act { margin: 0 0 22px; color: var(--faint); min-height: 3em; }
+#lab-controls .ctl { margin-bottom: 20px; }
+#lab-controls label { display: block; margin-bottom: 6px; }
+#lab-controls label b { float: right; color: var(--faint); font-weight: normal; }
+#lab-controls input[type=range] { width: 100%; accent-color: var(--ink); }
+#lab-controls .buttons { display: flex; gap: 8px; margin-bottom: 22px; }
+#lab-controls .buttons button { flex: 1; }
+#lab-controls .toggles { display: flex; gap: 18px; }
+#lab-controls .toggles label { display: flex; align-items: center; gap: 6px; margin: 0; }
+#lab-controls .notes { border-top: 1px solid var(--rule); padding-top: 16px;
+  color: var(--faint); }
+#lab-controls .notes p { margin: 0 0 12px; }
+#lab-controls .notes b { font-weight: normal; }
+.pa { color: #2a7f7a; } .pb { color: #b5352c; }
+/* where each act begins, ticked on the scrubber */
+#marks { position: relative; }
+#marks::before, #marks::after { content: ""; position: absolute; top: -3px;
+  width: 1px; height: 6px; background: var(--rule); }
+#marks::before { left: var(--curl-end, 45%); }
+#marks::after { left: var(--ring-start, 55%); }
+.legend { display: flex; justify-content: space-between; color: var(--faint);
+  font-size: 12px; margin-top: 4px; }
+
+@media (max-width: 900px) {
+  body.workshop { overflow: auto; }
+  #lab { grid-template-columns: minmax(0, 1fr); height: auto; gap: 16px; padding: 16px; }
+  #lab-stage { height: 52vh; }
+}

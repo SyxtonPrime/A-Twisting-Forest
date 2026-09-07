@@ -122,6 +122,40 @@ square that exists. There is a test that every step of the route joins two
 vertices that share a face, that the whole thing is one connected line, and
 that it really does cross each cylinder.
 
+## The workshop
+
+There is a second page, `lab.html`, which is a bench rather than a game. It has
+one thing on it: a rectangle rolling up into a torus, with a scrubber, so the
+roll can be got right on the simplest case there is before it is asked to do
+anything harder. The plan is to build the pieces up from here -- pentagon into
+a torus with a disc gone, hexagon into one with two, rectangles into the
+cylinders between -- and only move the result back into `chain.js` once each
+piece is worth watching.
+
+The net is a rectangle `2piR` by `2pir`, with both pairs of opposite edges to
+be glued, and it goes in two acts with a beat between them. Act one curls the
+sheet until its two long edges meet; act two bends the tube until its two ends
+meet.
+
+Act one is a real bend. Rolling a sheet round a cylinder changes no length in
+it, so the paper never has to give, and every distance on the net is still the
+distance on the tube.
+
+Act two cannot be, and it is worth saying so rather than hoping nobody notices.
+A flat torus has Gaussian curvature zero everywhere; a torus of revolution has
+`K = cos a / (r (R + r cos a))`, positive round the outside and negative round
+the hole. So the outside of the tube has to stretch and the inside has to
+squash, and no amount of care avoids it. The picture at the end is a lie about
+distances and the truth about which points are which, which is the only part
+the game needs.
+
+The rectangle also has to be a rectangle and not a square. A square forces
+`2piR = 2pir`, which is `R = r`: the horn torus, whose hole has closed to a
+point and which touches itself all the way round. The `R : r` slider goes down
+to 1 so you can watch that happen.
+
+`#t=0.72&R=2` in the hash opens the page at that moment and that shape.
+
 ## Where this is going
 
 This is phase one of three: **exploration**, then a **camp manager**, then a
@@ -160,6 +194,13 @@ later, and the smoothing pass is chosen to preserve it.
 - `src/polygon.js`, `src/world.js`, `src/rng.js` — the polygon that names the
   surface, terrain used only by the tests, and seeded randomness.
 - `src/main.js` — DOM wiring. The seed lives in the URL hash: `#seed=word`.
+- `src/roll/roll.js` — the roll itself: two bends, and where a point of the
+  sheet has got to at a given moment. No DOM and no mesh, so the tests can have
+  it on its own.
+- `src/roll/sheet.js` — the rectangle as a grid of quads, and the grid and
+  coloured edges drawn on it.
+- `src/roll/lab.js` — the workshop page: timeline, camera, and the framing that
+  keeps a long thin net and a fat torus both filling the frame.
 
 ### One sharp edge
 

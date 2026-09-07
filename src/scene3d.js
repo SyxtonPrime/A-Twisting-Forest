@@ -107,6 +107,10 @@ export class Solid {
   }
 
   radius() {
+    // A caller that is animating the shape can say how big it is itself, and
+    // smooth the number, so the camera eases in rather than snapping about as
+    // the piece changes size.
+    if (this.radiusOverride) return this.radiusOverride;
     const { V } = this.mesh, pos = this.pos;
     let r = 0;
     for (let i = 0; i < V; i++) r = Math.max(r, Math.hypot(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]));
@@ -183,9 +187,19 @@ export class Solid {
       // two-sided: a non-orientable world has no consistent outward side
       const lam = Math.abs((nx * lx + ny * ly + nz * lz) / (nl * ll));
       const shade = 0.34 + 0.66 * lam;
-      const r = Math.min(255, this.faceRGB[f * 3] * shade) | 0;
-      const g = Math.min(255, this.faceRGB[f * 3 + 1] * shade) | 0;
-      const bl = Math.min(255, this.faceRGB[f * 3 + 2] * shade) | 0;
+      // A sheet has two sides, and which one you are looking at is most of
+      // what tells you it has rolled over. Screen-space winding says which:
+      // the projection flips y, so a face wound counterclockwise in the world
+      // comes out clockwise, and a positive area means the back.
+      let src = this.faceRGB;
+      if (this.backRGB) {
+        const w = (this.sx[c] - this.sx[a]) * (this.sy[d] - this.sy[b])
+                - (this.sy[c] - this.sy[a]) * (this.sx[d] - this.sx[b]);
+        if (w > 0) src = this.backRGB;
+      }
+      const r = Math.min(255, src[f * 3] * shade) | 0;
+      const g = Math.min(255, src[f * 3 + 1] * shade) | 0;
+      const bl = Math.min(255, src[f * 3 + 2] * shade) | 0;
       const col = 0xff000000 | (bl << 16) | (g << 8) | r;
       this.tri(a, b, c, col);
       this.tri(a, c, d, col);

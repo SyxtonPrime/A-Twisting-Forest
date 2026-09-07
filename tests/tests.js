@@ -5,6 +5,8 @@ import { buildMesh } from '../src/mesh.js';
 import { buildHandle, handleGluings, boundaryLoop } from '../src/handle.js';
 import { buildChain, chainGluings, chainOverlay, chainPositions } from '../src/chain.js';
 import { mulberry32 } from '../src/rng.js';
+import { rollPoint, phaseAt, CURL_END, RING_START } from '../src/roll/roll.js';
+import { buildSheet, sheetPositions } from '../src/roll/sheet.js';
 
 const results = [];
 function test(name, fn) {
@@ -834,3 +836,103 @@ const failed = results.filter(r => !r.ok);
 el.textContent = results.map(r => (r.ok ? 'PASS ' : 'FAIL ') + r.name + (r.ok ? '' : '\n  ' + r.err)).join('\n') +
   `\n\n${results.length - failed.length}/${results.length} passed`;
 document.title = failed.length ? 'FAIL' : 'PASS';
+
+
+// ---- the roll: a rectangle into a torus --------------------------------
+
+test('roll: act one is a bend, and it ends on the cylinder', () => {
+  const R = 3, r = 1, P = Math.PI;
+  // flat to begin with
+  for (const y of [-P * r, 0, 0.4, P * r]) {
+    const p = rollPoint(2, y, R, r, 0, 0);
+    eq([p[0], p[1], p[2]], [2, y, 0], 'nothing has moved yet');
+  }
+  // the limit as the bend radius runs off to infinity is the flat sheet
+  const tiny = rollPoint(2, 1.3, R, r, 1e-7, 0);
+  ok(Math.abs(tiny[0] - 2) < 1e-9 && Math.abs(tiny[1] - 1.3) < 1e-6 && Math.abs(tiny[2]) < 1e-6,
+     'a very gentle bend is very nearly flat, and not a NaN');
+  // curled up, every point sits at distance r from the tube's axis
+  for (let k = 0; k <= 24; k++) {
+    const y = (-P + (2 * P * k) / 24) * r;
+    const p = rollPoint(0.7, y, R, r, 1, 0);
+    ok(Math.abs(Math.hypot(p[1], p[2] - r) - r) < 1e-9, 'on the cylinder');
+    ok(Math.abs(p[0] - 0.7) < 1e-12, 'nothing moves along the tube in act one');
+  }
+  // and no length across the sheet has changed: arc length is the coordinate
+  let arc = 0, prev = rollPoint(0, -P * r, R, r, 1, 0);
+  for (let k = 1; k <= 2000; k++) {
+    const p = rollPoint(0, -P * r + (2 * P * r * k) / 2000, R, r, 1, 0);
+    arc += Math.hypot(p[1] - prev[1], p[2] - prev[2]);
+    prev = p;
+  }
+  ok(Math.abs(arc - 2 * P * r) < 1e-4, `act one keeps the width: ${arc}`);
+});
+
+test('roll: it finishes on a torus, with both pairs of edges together', () => {
+  const R = 3, r = 1, P = Math.PI;
+  let worst = 0;
+  for (let a = 0; a <= 20; a++) {
+    for (let b = 0; b <= 20; b++) {
+      const x = (-P + (2 * P * a) / 20) * R, y = (-P + (2 * P * b) / 20) * r;
+      const p = rollPoint(x, y, R, r, 1, 1);
+      // the finished ring is centred on the y axis at z = r - R
+      const d = Math.hypot(p[0], p[2] - (r - R)) - R;
+      worst = Math.max(worst, Math.abs(Math.hypot(d, p[1]) - r));
+    }
+  }
+  ok(worst < 1e-9, `every point lands on the torus: worst ${worst}`);
+
+  // the long edges are one edge now, and so are the ends
+  for (const x of [-P * R, -1, 0, 2, P * R]) {
+    const lo = rollPoint(x, -P * r, R, r, 1, 1), hi = rollPoint(x, P * r, R, r, 1, 1);
+    ok(Math.hypot(lo[0] - hi[0], lo[1] - hi[1], lo[2] - hi[2]) < 1e-9, 'act one pair glued');
+  }
+  for (const y of [-P * r, -0.5, 0, 1.1, P * r]) {
+    const lo = rollPoint(-P * R, y, R, r, 1, 1), hi = rollPoint(P * R, y, R, r, 1, 1);
+    ok(Math.hypot(lo[0] - hi[0], lo[1] - hi[1], lo[2] - hi[2]) < 1e-9, 'act two pair glued');
+  }
+});
+
+test('roll: nothing tears, and the two acts do not overlap', () => {
+  const R = 3, r = 1;
+  const at0 = phaseAt(0), atEnd = phaseAt(1);
+  eq([at0.curl, at0.ring], [0, 0]);
+  eq([atEnd.curl, atEnd.ring], [1, 1]);
+  ok(phaseAt(CURL_END).curl === 1, 'act one is done when act one is done');
+  ok(phaseAt(RING_START).ring === 0, 'act two has not started before it starts');
+  ok(phaseAt((CURL_END + RING_START) / 2).curl === 1, 'the beat between is a cylinder');
+
+  // walk the timeline and check no point ever jumps
+  const P = Math.PI;
+  let worst = 0;
+  for (const [x, y] of [[0, 0], [P * R, P * r], [-2, 1.4], [5, -2.7]]) {
+    let prev = null;
+    for (let k = 0; k <= 400; k++) {
+      const { curl, ring } = phaseAt(k / 400);
+      const p = rollPoint(x, y, R, r, curl, ring);
+      ok(isFinite(p[0]) && isFinite(p[1]) && isFinite(p[2]), 'finite everywhere');
+      if (prev) worst = Math.max(worst, Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]));
+      prev = p;
+    }
+  }
+  ok(worst < 0.4, `the roll is continuous: biggest step ${worst}`);
+});
+
+test('roll: the sheet is a proper grid, and every quad keeps its four corners', () => {
+  const sh = buildSheet(12, 6);
+  eq(sh.V, 13 * 7); eq(sh.F, 72);
+  for (let f = 0; f < sh.F; f++) {
+    const q = [0, 1, 2, 3].map(k => sh.faces[f * 4 + k]);
+    eq(new Set(q).size, 4, 'four distinct corners');
+  }
+  // every vertex of the flat net is where the rectangle says it should be
+  const P = Math.PI, R = 3, r = 1;
+  const flat = sheetPositions(sh, 0, { R, r });
+  let w = 0, h = 0;
+  for (let i = 0; i < sh.V; i++) {
+    ok(Math.abs(flat[i * 3 + 2]) < 1e-6, 'the net lies in a plane');
+    w = Math.max(w, Math.abs(flat[i * 3])); h = Math.max(h, Math.abs(flat[i * 3 + 1]));
+  }
+  ok(Math.abs(2 * w - 2 * P * R) < 1e-4, 'the net is 2piR long');
+  ok(Math.abs(2 * h - 2 * P * r) < 1e-4, 'the net is 2pir across');
+});

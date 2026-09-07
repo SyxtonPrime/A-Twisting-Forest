@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>the workshop — A Twisting Forest</title>
+<meta name="description" content="A bench for the roll: a net bent up into the surface it stands for, one act at a time.">
+<meta name="theme-color" content="#f4efe6">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="workshop">
+<nav id="tabs">
+  <a href="index.html">the forest</a>
+  <a href="lab.html" aria-current="page">the workshop</a>
+</nav>
+<main id="lab">
+  <section id="lab-stage">
+    <canvas id="rollcanvas"></canvas>
+  </section>
+  <aside id="lab-controls">
+    <h1>a rectangle, rolled up</h1>
+    <p id="roll-act" class="act"></p>
+
+    <div class="ctl">
+      <label for="t">the roll <b id="t-out">0.00</b></label>
+      <div id="marks"><input id="t" type="range" min="0" max="1" step="0.001" value="0"></div>
+      <div class="legend"><span>flat</span><span>a tube</span><span>a torus</span></div>
+    </div>
+
+    <div class="buttons">
+      <button id="play">roll it up</button>
+      <button id="recentre">square on</button>
+    </div>
+
+    <div class="ctl">
+      <label for="aspect">R : r <b id="aspect-out">3.00 : 1</b></label>
+      <input id="aspect" type="range" min="1" max="5" step="0.01" value="3">
+      <p id="aspect-note" class="cap" hidden>R = r is the horn torus: the hole
+        has closed up and the surface touches itself all the way round.</p>
+    </div>
+
+    <div class="ctl toggles">
+      <label><input id="grid" type="checkbox" checked> the grid</label>
+      <label><input id="edges" type="checkbox" checked> the edges</label>
+    </div>
+
+    <div class="notes">
+      <p>The net is a rectangle 2&pi;R by 2&pi;r, with both pairs of opposite
+        edges to be glued. <b class="pa">The long edges</b> meet in act one and
+        <b class="pb">the ends</b> meet in act two.</p>
+      <p>Act one is a real bend: rolling a sheet round a cylinder changes no
+        length in it. Act two cannot be. A flat torus has curvature zero
+        everywhere and a torus of revolution does not, so the outside of the
+        tube stretches and the inside squashes. That is not a bug in the
+        picture; it is the reason the flat torus does not sit in space.</p>
+      <p class="cap">drag to turn it, scroll to zoom, space to play,
+        arrows to scrub.</p>
+    </div>
+  </aside>
+</main>
+<script type="module" src="src/roll/lab.js"></script>
+</body>
+</html>
