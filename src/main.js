@@ -4,6 +4,7 @@ import { drawWorldMap } from './worldmap.js';
 import { normalForm } from './polygon.js';
 import { buildHandlebody } from './handlebody.js';
 import { buildNet, netSeams } from './net.js';
+import { drawChainNet } from './chainnet.js';
 import { walkOnSolid } from './overlay.js';
 import { Solid } from './scene3d.js';
 import { randomSeedWord } from './rng.js';
@@ -23,6 +24,7 @@ function start(seed) {
   $('overlay').hidden = true;
   $('reveal').hidden = true;
   $('solid').hidden = true;
+  $('chainnet').hidden = true;
   $('worldmap').hidden = false;
   render();
 }
@@ -142,12 +144,14 @@ function stageSide() {
 function sizeStage() {
   const side = stageSide();
   drawWorldMap($('worldmap'), ex, side, side);
+  drawChainNet($('chainnet'), ex.tubePlan(), side, Math.round(side * 0.62));
   if (solid) { solid.resize(side, side); solid.draw(); }
 }
 
 function setView(v) {
   view = v;
   $('worldmap').hidden = v !== 'map';
+  $('chainnet').hidden = v !== 'net';
   $('solid').hidden = v !== 'solid';
   for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
     b.setAttribute('aria-pressed', String(b.dataset.view === v));
@@ -155,6 +159,8 @@ function setView(v) {
   $('roll').hidden = v !== 'solid';
   $('stage-hint').textContent = v === 'solid'
     ? 'drag to turn it over'
+    : v === 'net'
+    ? 'one piece. every handle is a pentagon, every join a cylinder'
     : 'everywhere you walked lies flat on the sphere, except the loops you closed';
   if (v === 'solid' && solid) solid.draw();
 }

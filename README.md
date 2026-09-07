@@ -76,7 +76,23 @@ between a handle and a Klein bottle.
 
 So it is not a diagram beside the map. It is the map.
 
-**The net.** The world cut open and laid flat, and a button that rolls it up.
+**The net.** One connected piece, in the form the classification theorem
+suggests. Each handle is a pentagon, `a b a⁻¹ b⁻¹ c`: the four paired sides
+close the handle up and `c` is left over as its rim. A twisted handle is the
+same pentagon with one arrow turned round, `a b a b⁻¹ c`, which is a Klein
+bottle rather than a torus. A handle in the middle of the chain needs two rims,
+so it is a hexagon; a world with a single handle needs none at all and is a
+closed square. Between them run rectangles, each of which rolls into the
+cylinder joining one handle to the next.
+
+The rim being one whole side is the trick, and it is the whole reason this lies
+flat in one piece. A rectangle can be glued to a whole side edge to edge. It
+cannot be glued to a rim that is a closed circle in the middle of a sheet,
+because a circle in the middle of a piece can never be a shared edge, and that
+is why the other net below falls into separate pieces however it is cut.
+
+**The pieces.** The same world cut the other way, and a button that rolls it
+up.
 
 The body is a tube with rounded ends, so cutting it once along its underside
 opens it into a single piece, widest in the middle and drawing to a point at
@@ -173,6 +189,19 @@ the wrong place if it is not: while the net was rolling up, the grid and the
 seams moved with it and the walk stayed behind in the shape of the finished
 solid, arcing through empty air where the tubes were going to be.
 
+## What is not joined up yet
+
+There are two nets, and only one of them rolls up. The chain of pentagons is
+the honest single piece, and it is a drawing. The cut-into-pieces net is the
+one that animates, because the net and the solid have to be the same mesh for
+that, and the solid is built as a capsule with tubes.
+
+Marrying them means building the solid from the chain instead: a row of tori
+joined by cylinders. The obstacle is not the topology, it is finding where each
+point of a pentagon lands on a torus. A square maps onto a torus of revolution
+in one line, but the pentagon is a different cut, and the map is the thing that
+would need working out.
+
 ## Where this is going
 
 This is phase one of three: **exploration**, then a **camp manager**, then a
@@ -199,8 +228,11 @@ later, and the smoothing pass is chosen to preserve it.
   the classification: Euler characteristic, orientability, cone points.
 - `src/handlebody.js` — the solid: a capsule, a pair of holes per tube, and a
   stitched tube between each pair.
-- `src/net.js` — the world rebuilt as separate flat pieces, each vertex holding
-  both where it lies in the net and where it lies on the solid.
+- `src/chainnet.js` — the net as one connected piece: pentagons, hexagons and
+  the rectangles between them, with the gluing lettered and arrowed.
+- `src/net.js` — the same world cut into separate flat pieces instead, each
+  vertex holding both where it lies flat and where it lies on the solid, which
+  is what lets one run into the other.
 - `src/overlay.js` — the map drawn on the surface, depth tested against it.
 - `src/mesh.js` — the quotient mesh of a polygon, and the face-winding pass
   that decides orientability. The winding pass is what `handlebody.js` uses to
