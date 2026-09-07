@@ -3,6 +3,7 @@ import { drawSketch } from './sketch.js';
 import { drawWorldMap } from './worldmap.js';
 import { normalForm } from './polygon.js';
 import { buildHandlebody } from './handlebody.js';
+import { buildNet, netSeams } from './net.js';
 import { walkOnSolid } from './overlay.js';
 import { Solid } from './scene3d.js';
 import { randomSeedWord } from './rng.js';
@@ -10,14 +11,14 @@ import { randomSeedWord } from './rng.js';
 const $ = id => document.getElementById(id);
 const settings = { revealDelay: 900 };
 
-let ex, solid, solidWalk = null, walkOn = true, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
+let ex, solid, solidWalk = null, solidSeams = [], walkOn = true, solidRAF = 0, view = 'map', mapOpen = false, revealed = false;
 
 function start(seed) {
   const h = new URLSearchParams(location.hash.slice(1));
   const s = seed || h.get('seed') || randomSeedWord();
   location.hash = `seed=${s}`;
   if (solidRAF) cancelAnimationFrame(solidRAF);
-  solidRAF = 0; solid = null; solidWalk = null; walkOn = true; revealed = false; mapOpen = false; view = 'map';
+  solidRAF = 0; solid = null; solidWalk = null; solidSeams = []; walkOn = true; rolling = null; revealed = false; mapOpen = false; view = 'map';
   ex = new Explore(s);
   $('overlay').hidden = true;
   $('reveal').hidden = true;
@@ -66,9 +67,14 @@ function renderActions() {
   const ways = ex.ways();
   ways.forEach((port, i) => {
     const name = ex.wayName(port);
-    act.appendChild(button(name === 'on' ? 'go on' : `go ${name}`, ways.length > 1 ? String(i + 1) : '⏎', () => {
-      ex.go(port); render();
-    }));
+    const known = ex.wayKnown(port);
+    const b = button(name === 'on' ? 'go on' : `go ${name}`,
+      ways.length > 1 ? String(i + 1) : '⏎', () => { ex.go(port); render(); });
+    if (known) {
+      b.classList.add('known');
+      b.title = 'you have walked this way before';
+    }
+    act.appendChild(b);
   });
   if (ex.canCamp()) act.appendChild(button('make camp', 'c', () => {
     ex.makeCamp(); mapOpen = true; render();
@@ -146,6 +152,7 @@ function setView(v) {
   for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
     b.setAttribute('aria-pressed', String(b.dataset.view === v));
   $('walk').hidden = v !== 'solid';
+  $('roll').hidden = v !== 'solid';
   $('stage-hint').textContent = v === 'solid'
     ? 'drag to turn it over'
     : 'everywhere you walked lies flat on the sphere, except the loops you closed';
@@ -155,18 +162,58 @@ function setView(v) {
 // The solid is built, not settled, so there is nothing to wait for: the
 // shape is right the moment it exists.
 function buildSolid() {
-  const mesh = buildHandlebody(ex.tubePlan().map(t => t.twisted));
+  const closed = buildHandlebody(ex.tubePlan().map(t => t.twisted));
+  const mesh = buildNet(closed);            // the same thing, cut open
   solid = new Solid($('solid'), mesh, mesh.positions);
   solid.el = 0.42;
-  solidWalk = walkOnSolid(ex, mesh);
-  solid.overlay = walkOn ? solidWalk : null;
+  solid.setMorph(1);
+  solidSeams = netSeams(mesh);
+  solidWalk = walkOnSolid(ex, mesh, solid.pos);
+  solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams;
   solid.resize(stageSide(), stageSide());
   const spin = () => {
     solidRAF = requestAnimationFrame(spin);
-    if (solid.autoSpin) solid.az += 0.004;
+    if (rolling) stepRoll();
+    else if (solid.autoSpin) solid.az += 0.004;
     if (!$('solid').hidden) solid.draw();
   };
   spin();
+}
+
+// Rolling up, and unrolling. The camera swings square to the net as it opens
+// out, because a flat thing seen edge-on is nothing to look at.
+let rolling = null;
+function startRoll(to) {
+  if (!solid) return;
+  // Remember where the camera started, or interpolating towards square-on
+  // each frame compounds and snaps it round in the first few frames.
+  rolling = {
+    from: solid.morph, to, t0: performance.now(), ms: 2200,
+    az: solid.az, el: solid.el,
+    toAz: to > 0.5 ? 0.45 : 0, toEl: to > 0.5 ? 0.36 : 0,
+  };
+  solid.autoSpin = false;
+  $('roll').disabled = true;
+}
+function stepRoll() {
+  const r = rolling;
+  const raw = Math.min(1, (performance.now() - r.t0) / r.ms);
+  const e = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
+  const m = r.from + (r.to - r.from) * e;
+  solid.setMorph(m);
+  // The net lies in a plane, so square-on to it is no turn at all.
+  solid.az = r.az + (r.toAz - r.az) * e;
+  solid.el = r.el + (r.toEl - r.el) * e;
+  solidWalk = walkOnSolid(ex, solid.mesh, solid.pos);
+  solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams;
+  if (raw >= 1) {
+    rolling = null;
+    $('roll').disabled = false;
+    $('roll').textContent = solid.morph > 0.5 ? 'unroll the net' : 'roll it up';
+    $('stage-hint').textContent = solid.morph > 0.5
+      ? 'drag to turn it over'
+      : 'the world cut open and laid flat: glue the long edges back, and each strip into its holes';
+  }
 }
 
 // ---- wiring -----------------------------------------------------------
@@ -194,10 +241,11 @@ $('again').onclick = () => start(randomSeedWord());
 $('same').onclick = () => start(ex.seed);
 for (const b of document.querySelectorAll('#reveal .buttons button[data-view]'))
   b.onclick = () => setView(b.dataset.view);
+$('roll').onclick = () => startRoll(solid && solid.morph > 0.5 ? 0 : 1);
 $('walk').onclick = () => {
   walkOn = !walkOn;
   $('walk').textContent = walkOn ? 'hide the walk' : 'show the walk';
-  if (solid) { solid.overlay = walkOn ? solidWalk : null; solid.draw(); }
+  if (solid) { solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams; solid.draw(); }
 };
 
 let resizeTimer;
@@ -207,4 +255,4 @@ window.addEventListener('resize', () => {
 });
 
 start();
-window.dev = { ex: () => ex, render, setWalk: v => { walkOn = v; if (solid) solid.overlay = v ? solidWalk : null; }, setMapOpen: v => { mapOpen = v; }, settings, solid: () => solid, setView };
+window.dev = { ex: () => ex, render, refreshWalk: () => { if (solid) { solidWalk = walkOnSolid(ex, solid.mesh, solid.pos); solid.overlay = walkOn ? [...solidSeams, ...solidWalk] : solidSeams; } }, setWalk: v => { walkOn = v; if (solid) solid.overlay = v ? solidWalk : null; }, setMapOpen: v => { mapOpen = v; }, settings, solid: () => solid, setView };

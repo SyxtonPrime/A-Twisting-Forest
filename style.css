@@ -17,6 +17,10 @@ button {
 button:active { background: var(--ink); color: var(--paper); }
 @media (hover: hover) { button:hover { background: var(--ink); color: var(--paper); } }
 button[disabled] { opacity: .4; cursor: default; }
+/* a way already walked: you would remember, so it is not hidden */
+button.known { border-style: dashed; color: var(--faint); border-color: var(--faint); }
+button.known:active { background: var(--faint); color: var(--paper); }
+@media (hover: hover) { button.known:hover { background: var(--faint); color: var(--paper); } }
 .key { color: var(--faint); margin-left: 6px; }
 button:hover .key, button:active .key { color: var(--paper); }
 .cap { color: var(--faint); text-align: center; margin: 6px 0 0; font-size: 12px; }

@@ -76,6 +76,29 @@ between a handle and a Klein bottle.
 
 So it is not a diagram beside the map. It is the map.
 
+**The net.** The world cut open and laid flat, and a button that rolls it up.
+
+The body is a tube with rounded ends, so cutting it once along its underside
+opens it into a single piece, widest in the middle and drawing to a point at
+each end, with a hole where every tube met it. Each tube is a tube as well, so
+each is cut free at both ends and cut once along its length, and lies flat as a
+strip.
+
+What is left is the gluing, and the gluing is the whole of the world's shape:
+the two long edges of the body join back to each other, the two long edges of
+each strip join to each other, and each end of a strip goes into one of the
+holes. A strip entering its second hole the same way round makes a handle;
+entering it reversed makes a Klein bottle.
+
+Nothing with a handle in it can be laid flat in one piece, which is why the
+strips come away rather than staying attached. That is not a shortcut; it is
+the reason nets have glue tabs. Where the walk crosses a cut it is broken, on
+the body's seam and where it leaves for a strip, because that is where the
+world was opened.
+
+The net and the solid are the same mesh. Every vertex knows where it sits in
+each, so running one into the other rolls it up.
+
 **The solid.** The same surface as something you can drag, and it is built
 rather than found. A capsule stands for the sphere, one pair of holes is cut
 per tube, and a tube is stitched between each pair. Stitch the far end the same
@@ -141,10 +164,20 @@ flat everywhere except at their cone points and nothing in that energy says
 "look like a pretzel". Building the classic picture directly is both prettier
 and more exact, so the relaxation is gone.
 
+## One more sharp edge
+
+Anything drawn on the surface comes in two kinds. A path given as vertex
+indices follows the surface for free however it moves. A path given as explicit
+points has to be rebuilt whenever the surface does, and quietly draws itself in
+the wrong place if it is not: while the net was rolling up, the grid and the
+seams moved with it and the walk stayed behind in the shape of the finished
+solid, arcing through empty air where the tubes were going to be.
+
 ## Where this is going
 
 This is phase one of three: **exploration**, then a **camp manager**, then a
-**Civ-like battler**. The whole of it is meant to be played on a flat net, and
+**Civ-like battler**. The net is the beginning of the answer to where that gets
+played: it is already a flat grid of quads with the gluing written down. The whole of it is meant to be played on a flat net, and
 only at the end do you zoom out and see what the world was.
 
 That is why the solid is a stitched quad grid rather than an isosurface. An
@@ -166,7 +199,9 @@ later, and the smoothing pass is chosen to preserve it.
   the classification: Euler characteristic, orientability, cone points.
 - `src/handlebody.js` — the solid: a capsule, a pair of holes per tube, and a
   stitched tube between each pair.
-- `src/overlay.js` — the walk drawn on the solid, depth tested against it.
+- `src/net.js` — the world rebuilt as separate flat pieces, each vertex holding
+  both where it lies in the net and where it lies on the solid.
+- `src/overlay.js` — the map drawn on the surface, depth tested against it.
 - `src/mesh.js` — the quotient mesh of a polygon, and the face-winding pass
   that decides orientability. The winding pass is what `handlebody.js` uses to
   check itself; the quotient mesh is now only used by the tests, where it is a

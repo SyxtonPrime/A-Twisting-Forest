@@ -60,7 +60,7 @@ export function buildHandlebody(tubeTwists) {
   // together without either being stretched round the other.
   const P = Math.max(3, Math.min(9, Math.round((TUBE * C) / 4)));
   const RING = 4 * P;
-  const geom = { RBAR, tubes: [], C, P };
+  const geom = { RBAR, tubes: [], C, P, SEG };
   const pos = [];                       // [x, y, z] per vertex
   const faces = [];                     // [a, b, c, d], d repeated for a triangle
   const rgb = [];                       // one colour per face
@@ -94,6 +94,7 @@ export function buildHandlebody(tubeTwists) {
   const M = prof.length - 1;
   geom.L = L;
   geom.prof = prof;
+  geom.cell = cellX;
 
   // The body follows a shallow arc rather than a straight line. A straight
   // capsule reads as a rail with things bolted to it; bending it puts the
@@ -153,6 +154,7 @@ export function buildHandlebody(tubeTwists) {
   for (const h of holes)
     for (let a = 0; a < P; a++)
       for (let b = 0; b < P; b++) removed.add(`${h.j + a},${(h.k + b) % C}`);
+  geom.removed = removed;
 
   const faceRGB = c => { rgb.push(c[0], c[1], c[2]); };
   for (let j = 0; j < M; j++) {
@@ -268,6 +270,7 @@ export function buildHandlebody(tubeTwists) {
       rings.push(row);
     }
 
+    const faceStart = faces.length;
     for (let s = 0; s < SEG; s++) {
       for (let k = 0; k < RING; k++) {
         const k2 = (k + 1) % RING;
@@ -275,10 +278,22 @@ export function buildHandlebody(tubeTwists) {
         faceRGB(STONE);
       }
     }
-    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames, rings, holeA: hA, holeB: hB });
+    geom.tubes.push({ twisted, rad, cA, cB, nA, nB, centres, frames, rings,
+                      holeA: hA, holeB: hB, faceStart, seg: SEG, ring: RING });
   }
 
   const packed = pack(pos, faces, rgb);
+  // Packing drops the vertices stranded inside each cut hole, which shifts
+  // every index after them. Anything still holding the old ids -- the grid,
+  // and each tube's rings -- has to be carried across, or it ends up pointing
+  // a few vertices along and everything drawn on the surface sits slightly
+  // wrong.
+  const move = v => {
+    const w = packed.used.get(v);
+    return w === undefined ? -1 : w;
+  };
+  geom.grid = geom.grid.map(row => row.map(move));
+  for (const t of geom.tubes) t.rings = t.rings.map(r => r.map(move));
   packed.geom = geom;
   return packed;
 }
@@ -353,7 +368,7 @@ function pack(pos, faces, rgb) {
   const { orient, orientable } = orientFaces(fa, F, V);
   return {
     V, F, faces: fa, positions, edgeA, edgeB, adj, start, deg, orient, orientable,
-    rgb: Uint8Array.from(rgb), seam: [],
+    rgb: Uint8Array.from(rgb), seam: [], used,
     chi: V - edgeA.length + F,
   };
 }

@@ -26,6 +26,9 @@ export class Solid {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.mesh = mesh;
+    this.solidPos = pos;
+    this.flatPos = mesh.flat || null;
+    this.morph = 1;                    // 1 rolled up, 0 laid flat
     this.pos = pos;
     this.az = 0.6; this.el = 0.45; this.zoom = 1;
     this.autoSpin = true;
@@ -132,6 +135,20 @@ export class Solid {
     return [c.cx + c.f * x1 * inv, c.cy - c.f * y2 * inv, inv, d];
   }
 
+  // Between the net and the solid. Straight interpolation of every vertex,
+  // which is why the mesh has to be the cut one: the strips have to be able
+  // to come away from the body.
+  setMorph(t) {
+    this.morph = Math.max(0, Math.min(1, t));
+    if (!this.flatPos) return;
+    if (!this.blend) this.blend = new Float32Array(this.solidPos.length);
+    const e = this.morph;
+    for (let i = 0; i < this.solidPos.length; i++) {
+      this.blend[i] = this.flatPos[i] + (this.solidPos[i] - this.flatPos[i]) * e;
+    }
+    this.pos = this.blend;
+  }
+
   project() {
     const { V } = this.mesh, pos = this.pos;
     const c = this.camera();
@@ -227,10 +244,16 @@ export class Solid {
     for (const path of this.overlay) {
       const rgb = path.rgb;
       const col = 0xff000000 | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
-      const pts = path.pts;
+      // A path is either explicit points, or vertex indices, which follow the
+      // surface for free as it rolls up.
+      const ids = path.ids;
+      const pts = ids ? null : path.pts;
+      const n = ids ? ids.length : pts.length;
       let prev = null, phase = 0;
-      for (let i = 0; i < pts.length; i++) {
-        const p = this.point(c, pts[i][0], pts[i][1], pts[i][2]);
+      for (let i = 0; i < n; i++) {
+        const q = ids ? [this.pos[ids[i] * 3], this.pos[ids[i] * 3 + 1], this.pos[ids[i] * 3 + 2]] : pts[i];
+        if (!q) { prev = null; continue; }         // a break: the grid is cut here
+        const p = this.point(c, q[0], q[1], q[2]);
         if (prev && prev[3] > 0.06 && p[3] > 0.06) {
           phase = this.segment(prev, p, col, path.wide, path.dash, phase);
         }

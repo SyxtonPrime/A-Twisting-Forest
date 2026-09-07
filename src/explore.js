@@ -114,6 +114,10 @@ export class Explore {
     return out.length ? out : all;
   }
 
+  // Whether this way has been walked before. The player would remember, so
+  // it is not a secret; only where an unwalked path comes out is.
+  wayKnown(port) { return this.here.ports[port] !== null; }
+
   wayName(port) {
     const n = this.here;
     const list = this.ways();
