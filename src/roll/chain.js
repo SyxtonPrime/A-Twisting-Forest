@@ -13,20 +13,19 @@
 // the handles are tubes and the neck is a tube between them, and from there
 // on everything is a bend.
 //
-// The two rims have to be matched up, and simply walking the far one backwards
-// is not enough. Reversing a closed walk is a reflection, but it is the
-// reflection that fixes wherever the walk happens to start, and that is a
-// corner of the hole rather than the axis the two rims actually want to agree
-// about. The neck comes out sheared: every ruled line crosses the tube
-// diagonally instead of running straight along it.
-//
-// The two holes face each other, so they agree about the way round the tube
-// and disagree about the way round the ring. So the match is made on the
-// hole's own coordinates -- keep the one, mirror the other -- and the neck
-// runs straight.
+// The right-hand handle is built as a mirror image rather than turned round.
+// That is what makes the neck a rectangle. Two holes that face each other agree
+// about the way round the tube and disagree about the way round the ring, so
+// turning one piece round leaves the rims matched by a mirror in one
+// coordinate only -- which sends the slit's cut point to the opposite corner of
+// the hole. In space that is only a rotation of a circle and never shows, but
+// flat the rim is pinned as an arc with its cut at the two ends of a side, so
+// the far edge of the neck folds back on itself. Reflect the piece instead and
+// the two holes have the same local axes: the rims match index for index, cut
+// lands on cut, and the neck runs straight in both drawings.
 
 import { buildPiece, piecePositions, pieceOverlay, RIM } from './piece.js';
-import { rimArc, rimUV } from '../handle.js';
+import { rimArc } from '../handle.js';
 import { phaseAt, THREE_ACT } from './roll.js';
 
 const GRID = [173, 165, 148];
@@ -36,9 +35,7 @@ const BACK = [166, 156, 136];
 // How far apart the pieces sit, at each of the three things the net becomes.
 // The developed rectangles are the widest the net ever is, since each one is
 // 2piR long, and the finished tori are the narrowest.
-const APART = { flat: 7.7, dev: 12.4, solid: 4.9 };
-const SAG = 3.2;                              // how far under the neck arches
-const SPAN = 8;                               // cells along the neck
+const SAG = 3.2;                               // how far under the neck arches
 
 export function buildChain(opts = {}) {
   const nu = opts.nu || 20, nv = opts.nv || 60;
@@ -47,11 +44,26 @@ export function buildChain(opts = {}) {
   const r = opts.r === undefined ? 1 : opts.r;
   const base = { nu, nv, hu, hv, R, r };
 
-  // the left handle's neck leaves to the right, the right handle's to the left
+  // the left handle's neck leaves to the right; the right handle is the same
+  // piece reflected, so its neck leaves to the left
   const pieces = [
     buildPiece({ ...base, face: 0.25 }),
-    buildPiece({ ...base, face: -0.25, turn: true }),
+    buildPiece({ ...base, face: 0.25, mirror: true }),
   ];
+
+  // How far apart the pieces sit, at each of the three things the net becomes.
+  // Flat, far enough that the neck is a little longer than it is wide, which
+  // reads as a rectangle rather than as a join; developed, far enough that two
+  // sheets each 2piR long do not overlap, which is the widest the net ever is;
+  // rolled, close enough that the neck is a neck.
+  const rad = pieces[0].pentRad;
+  const apothem = rad * Math.cos(Math.PI / 5);
+  const side = 2 * rad * Math.sin(Math.PI / 5);   // the rim side of the pentagon
+  const gap = side * 1.15;
+  const APART = { flat: (gap + 2 * apothem) / 2, dev: Math.PI * R + 3, solid: R + r + 1.7 };
+  // and enough cells along the neck that its grid comes out square, since a
+  // long thin cell is what makes a rectangle look like something else
+  const span = Math.max(6, Math.min(24, Math.round(gap / (side / (2 * (hu + hv))))));
 
   // ---- one numbering for everything -------------------------------------
   const offset = [];
@@ -71,12 +83,12 @@ export function buildChain(opts = {}) {
   const b = rimArc(pieces[1].h, 0).map(v => v + offset[1]);
   const m = a.length;
   const cols = [a];
-  for (let s = 1; s < SPAN; s++) {
+  for (let s = 1; s < span; s++) {
     const col = [];
     for (let k = 0; k < m; k++) col.push(V++);
     cols.push(col);
   }
-  cols.push(mirrorRim(pieces, b));
+  cols.push(b);
   for (let s = 0; s + 1 < cols.length; s++) {
     for (let k = 0; k + 1 < m; k++) {
       faces.push([cols[s][k], cols[s][k + 1], cols[s + 1][k + 1], cols[s + 1][k]]);
@@ -91,27 +103,12 @@ export function buildChain(opts = {}) {
     for (let c = 0; c < 3; c++) { rgb[k * 3 + c] = FRONT[c]; backRGB[k * 3 + c] = BACK[c]; }
   }
 
-  return { pieces, offset, cols, m, V, F, faces: fa, rgb, backRGB, seam: [],
+  return { pieces, offset, cols, m, V, F, faces: fa, rgb, backRGB, seam: [], APART,
            plan: THREE_ACT, R, r, scratch: pieces.map(p => new Float32Array(p.V * 3)) };
 }
 
-// The far rim, put in the order that makes the neck run straight: for each
-// vertex of the near rim, the vertex of the far one at the same place round
-// the tube and the mirrored place round the ring.
-function mirrorRim(pieces, far) {
-  const A = pieces[0].h, B = pieces[1].h;
-  const uvA = rimUV(A, 0), uvB = rimUV(B, 0);
-  const at = new Map();
-  uvB.forEach(([u, v], i) => at.set(u + ',' + v, i));
-  const vA = A.holes[0].v0, vB = B.holes[0].v0, hv = A.hv;
-  return uvA.map(([u, v]) => {
-    const j = at.get(u + ',' + (vB + hv - (v - vA)));
-    return far[j === undefined ? 0 : j];
-  });
-}
-
 export function chainPositions(chain, t, opts = {}, out) {
-  const { pieces, offset, cols, m, V, scratch } = chain;
+  const { pieces, offset, cols, m, V, scratch, APART } = chain;
   const { open, curl, ring } = phaseAt(t, chain.plan);
   const pos = out && out.length === V * 3 ? out : new Float32Array(V * 3);
 

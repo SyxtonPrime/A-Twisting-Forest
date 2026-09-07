@@ -1066,6 +1066,28 @@ test('pair: flat it is one connected piece, and the neck reaches both rims', () 
   }
 });
 
+test('pair: flat, the neck is a rectangle and its grid is square', () => {
+  const chain = buildRollChain({ nu: 12, nv: 24, hu: 4, hv: 4, R: 3, r: 1 });
+  const flat = rollChainPositions(chain, 0);
+  const near = chain.cols[0], far = chain.cols[chain.cols.length - 1];
+  // every ruled line runs straight across: same height at both ends
+  for (let k = 0; k < chain.m; k++) {
+    const dy = Math.abs(flat[near[k] * 3 + 1] - flat[far[k] * 3 + 1]);
+    ok(dy < 1e-3, `line ${k} of the neck is level: off by ${dy}`);
+  }
+  // the two rims run the same way, not one of them folded back
+  for (let k = 0; k + 1 < chain.m; k++) {
+    const a = flat[near[k + 1] * 3 + 1] - flat[near[k] * 3 + 1];
+    const b = flat[far[k + 1] * 3 + 1] - flat[far[k] * 3 + 1];
+    ok(a * b > 0, `step ${k} goes the same way on both rims`);
+  }
+  // and the cells are not far off square
+  const last = chain.cols.length - 1;
+  const along = Math.abs(flat[far[0] * 3] - flat[near[0] * 3]) / last;
+  const across = Math.abs(flat[near[chain.m - 1] * 3 + 1] - flat[near[0] * 3 + 1]) / (chain.m - 1);
+  ok(along / across > 0.6 && along / across < 1.7, `cells are squarish: ${(along / across).toFixed(2)}`);
+});
+
 // ---- the report ------------------------------------------------------
 
 const el = document.getElementById('out');

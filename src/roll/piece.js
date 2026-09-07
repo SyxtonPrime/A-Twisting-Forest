@@ -41,6 +41,15 @@ export const RIM = [194, 138, 27];           // c, which stays a boundary
 
 // `face` is which way round the ring the hole should point once it is rolled
 // up, in turns: 0.25 puts it on the +x side, ready for a neck to the right.
+//
+// `mirror` reflects the whole piece in x, both drawings and the solid, which
+// is how the right-hand handle of a chain is made. Reflecting rather than
+// turning it round matters: a reflected hole has the same local axes as the
+// one it faces, so the two rims match up index for index, the slit's cut point
+// on one lands on the cut point of the other, and the neck between them comes
+// out an honest rectangle. Turn the piece round instead and the match is a
+// mirror in one coordinate only, which sends the cut to the far corner and
+// leaves the neck folded back on itself.
 export function buildPiece(opts = {}) {
   const nu = opts.nu || 24;                  // round the tube
   const nv = opts.nv || 72;                  // round the ring
@@ -48,6 +57,8 @@ export function buildPiece(opts = {}) {
   const R = opts.R === undefined ? 3 : opts.R;
   const r = opts.r === undefined ? 1 : opts.r;
   const face = opts.face === undefined ? 0.25 : opts.face;
+  const mirror = !!opts.mirror;
+  const mx = mirror ? -1 : 1;
 
   // The hole goes half way round the tube, which act two puts on the outside
   // of the ring, and `face` of the way round the ring.
@@ -61,7 +72,7 @@ export function buildPiece(opts = {}) {
   const V = h.V;
   const dev = new Float32Array(V * 2);
   for (let i = 0; i < V; i++) {
-    dev[i * 2] = (h.uv[i][1] / nv - 0.5) * 2 * Math.PI * R;
+    dev[i * 2] = mx * (h.uv[i][1] / nv - 0.5) * 2 * Math.PI * R;
     dev[i * 2 + 1] = (h.uv[i][0] / nu - 0.5) * 2 * Math.PI * r;
   }
 
@@ -69,13 +80,14 @@ export function buildPiece(opts = {}) {
   // The grid is built in (u, v) and drawn in (x, y) = (f(v), g(u)), and
   // swapping the two turns the winding round, so it is turned back here. The
   // renderer tells the two sides of the sheet apart by the winding, and would
-  // otherwise show every face inside out.
+  // otherwise show every face inside out. A mirrored piece turns it round once
+  // more, so for that one the two cancel and the grid order stands.
   const F = h.F;
   const faces = new Int32Array(F * 4);
   for (let f = 0; f < F; f++) {
     const q = h.faces[f];
-    faces[f * 4] = q[0]; faces[f * 4 + 1] = q[3];
-    faces[f * 4 + 2] = q[2]; faces[f * 4 + 3] = q[1];
+    const o = mirror ? [0, 1, 2, 3] : [0, 3, 2, 1];
+    for (let c = 0; c < 4; c++) faces[f * 4 + c] = q[o[c]];
   }
   const rgb = new Uint8Array(F * 3), backRGB = new Uint8Array(F * 3);
   for (let k = 0; k < F; k++) {
@@ -83,10 +95,10 @@ export function buildPiece(opts = {}) {
   }
 
   const rim = rimArc(h, 0);
-  const pent = pentagonLayout(h, rim, R, r, !!opts.turn);
+  const { xy: pent, rad: pentRad } = pentagonLayout(h, rim, R, r, mx);
 
   return { h, nu, nv, hu, hv, R, r, V, F, faces, rgb, backRGB, seam: [],
-           dev, pent, rim, plan: THREE_ACT, side: -1, offset: 0 };
+           dev, pent, pentRad, rim, mirror, plan: THREE_ACT, side: -1 };
 }
 
 // Where every vertex is at time t: the flat drawing interpolated by act zero,
@@ -168,16 +180,15 @@ function divisor(n, want) {
 //
 // The pentagon is sized to have about the area of the sheet it will become,
 // so act zero is a change of shape rather than a change of scale.
-function pentagonLayout(h, rim, R, r, turn) {
+function pentagonLayout(h, rim, R, r, mx) {
   const area = 4 * Math.PI * Math.PI * R * r;
   const rad = Math.sqrt(area / (2.5 * Math.sin(2 * Math.PI / 5)));
   const P = [];
   for (let i = 0; i < 5; i++) {
-    // side 0 is the rim, and it faces +x, or -x for a piece whose neighbour
-    // is on its left. A pentagon has no side opposite another, so the far end
-    // of a chain is turned round rather than having its rim on a slant.
-    const a = -Math.PI / 5 + (i / 5) * 2 * Math.PI + (turn ? Math.PI : 0);
-    P.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+    // side 0 is the rim, and it faces +x -- or -x once the whole drawing is
+    // reflected, which is what a piece whose neighbour is on its left gets.
+    const a = -Math.PI / 5 + (i / 5) * 2 * Math.PI;
+    P.push([mx * Math.cos(a) * rad, Math.sin(a) * rad]);
   }
 
   const loop = boundaryLoop(h);
@@ -205,7 +216,7 @@ function pentagonLayout(h, rim, R, r, turn) {
   along([P[1], P[2], P[3], P[4], P[0]], tail.length + 2)
     .slice(1, -1).forEach((pt, i) => pinned.set(tail[i], pt));
 
-  return tutte(h, pinned, 2600);
+  return { xy: tutte(h, pinned, 2600), rad };
 }
 
 // Every vertex of the boundary, for the tests: the drawing is only a drawing

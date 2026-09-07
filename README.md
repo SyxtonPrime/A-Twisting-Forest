@@ -201,15 +201,23 @@ sheet, the neck has nowhere flat left to be attached, so it lifts off the page
 and arches under. That is not a cheat being covered up — it is the difference
 between the two drawings, made visible.
 
-The two rims have to be matched up, and walking the far one backwards is not
-enough. Reversing a closed walk is a reflection, but it is the reflection that
-fixes wherever the walk happens to start, which is a corner of the hole rather
-than the axis the two rims want to agree about. The neck comes out sheared,
-every ruled line crossing it diagonally. The two holes face each other, so they
-agree about the way round the tube and disagree about the way round the ring:
-keep the one, mirror the other, and the neck runs straight. There is a test
-that every ruled line of the neck is about the same length, which a sheared
-match fails.
+The right-hand handle is built as a **mirror image** of the left, not as a copy
+turned round, and that is what makes the neck a rectangle.
+
+Two holes that face each other agree about the way round the tube and disagree
+about the way round the ring. So if the second handle is merely turned round,
+the two rims are matched by a mirror in one coordinate only — and that sends
+the slit's cut point to the opposite corner of the hole. In space the rim is a
+closed circle, so a rotation of it never shows and the tube looks fine. Flat, a
+rim is pinned as an arc with its cut at the two ends of a pentagon side, so the
+far edge of the neck folds back on itself and the neck stops being a rectangle
+at all.
+
+Reflect the piece instead and the two holes have the same local axes. The rims
+match index for index, cut lands on cut, and the neck runs straight in both
+drawings. There are tests that every ruled line of the neck is about the same
+length in space, that flat every one of them is level and the two rims run the
+same way, and that the neck's cells come out roughly square.
 
 ## Where this is going
 
