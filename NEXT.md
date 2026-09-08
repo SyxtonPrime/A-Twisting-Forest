@@ -131,3 +131,60 @@ The old routing must keep working, because `src/chain.js` — the game's own net
 which is separate from the workshop's — calls `buildHandle` and has tests of
 its own. Make the corner routing opt-in and have `src/roll/piece.js` ask for
 it; leave the default alone.
+
+# Next: let a cap grow a neck too
+
+Tapping a cap does nothing at the moment — `grow` in `src/roll/net.js` refuses
+when the node is a cap, and `buildCap` only ever makes a piece with one rim. It
+should behave exactly like tapping a handle: the cap gains a side, a neck, and
+something new on the end of it.
+
+A cap with `k` necks is a sphere with `k` discs gone: one is the cap we have,
+two is a tube, three is a pair of pants, and so on. None of them adds anything
+to the genus, which is the point of having them — they let a net branch without
+paying a handle for every branch point. `genus` in `buildNet` already counts
+handles only and needs no change.
+
+## It stays a (4 + k)-gon, and the pairs stay nested
+
+The nice part is that the rule holds all the way up. A piece of either kind
+with `k` necks is a `(4 + k)`-gon with `k` rim sides and four paired ones; what
+tells them apart is only whether those four are **crossed** or **nested**:
+
+| k | genus 1 | genus 0 |
+| --- | --- | --- |
+| 1 | `a b a⁻¹ b⁻¹ c` | `c a b b⁻¹ a⁻¹` |
+| 2 | `c₁ a b c₂ a⁻¹ b⁻¹` | `c₁ a₁ a₂ c₂ a₂⁻¹ a₁⁻¹` |
+| 3 | seven sides, three rims | `c₁ s₁ c₂ s₁⁻¹ s₂ c₃ s₂⁻¹` |
+
+For the sphere the four paired sides are the **slits**, cut in half. One rim
+needs one slit and halving it gives four sides; two rims need one slit between
+them, halved, and again four; three rims need two slits and they are already
+four sides between them. So the count comes out at four every time and the
+shape never gives the piece away — which is the property that was just built
+for `k = 1` and should be kept.
+
+Worth checking rather than trusting: `src/polygon.js` has `classify()`, which
+gives the Euler characteristic, orientability and the number of boundary
+circles for a glued polygon. Feed it each word above and confirm
+`χ = 2 − k`, orientable, `k` boundary circles, before building any mesh for it.
+
+## The roll is honest for two of them and not the third
+
+- `k = 1` — the sector into a cone. Already built, and a real bend.
+- `k = 2` — a rectangle into a tube. Also a real bend, and it is exactly what
+  the `rectangle` specimen's act one already does; the mesh is a plain grid
+  rather than a polar one.
+- `k ≥ 3` — a pair of pants is not developable, so there is no honest first
+  act. Act two does the work, as it does for the handles.
+
+So `buildCap` probably wants splitting: a polar grid for one rim, a plain grid
+for two, and something else again for three. Do not try to make one mesh serve
+all of them.
+
+## While you are in there
+
+`grow(net, at, kind)` should stop refusing caps, and the eight-piece limit in
+the tap handler in `src/roll/lab.js` should probably become a limit on necks
+per piece — four, which is what the corner routing above allows — rather than
+on pieces in the net.
