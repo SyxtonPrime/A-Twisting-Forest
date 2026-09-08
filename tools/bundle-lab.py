@@ -19,8 +19,8 @@ MODULES = [
     ('roll', 'src/roll/roll.js'),
     ('smooth', 'src/roll/smooth.js'),
     ('sheet', 'src/roll/sheet.js'),
-    ('cap', 'src/roll/cap.js'),
     ('piece', 'src/roll/piece.js'),
+    ('cap', 'src/roll/cap.js'),
     ('net', 'src/roll/net.js'),
     ('lab', 'src/roll/lab.js'),
 ]

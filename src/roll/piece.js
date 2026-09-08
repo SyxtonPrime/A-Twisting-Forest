@@ -502,7 +502,7 @@ function alongRange(pts, count, t0, t1) {
   return out;
 }
 
-function tutte(h, pinned, iters) {
+export function tutte(h, pinned, iters) {
   const nbr = new Map();
   for (const f of h.faces) {
     for (let i = 0; i < 4; i++) {
@@ -548,7 +548,7 @@ function tutte(h, pinned, iters) {
 // the sheet is a rectangle, so something has to give -- but it is spread out
 // as an even shear instead of being piled into a few swirls, and a grid that
 // leans is far easier to read than a grid that curls.
-function arap(h, pinned, rest, init, outer = 26, inner = 8) {
+export function arap(h, pinned, rest, init, outer = 26, inner = 8) {
   const V = h.V, F = h.faces.length;
   // every cell contributes its four sides and both diagonals: without the
   // diagonals a quad can shear freely and the rotations have nothing to hold

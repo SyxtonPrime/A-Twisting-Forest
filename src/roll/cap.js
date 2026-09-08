@@ -23,20 +23,32 @@
 // The rim arc is the same length as a handle's rim side -- but it is an arc,
 // and a handle's is straight, so a neck sewn between the two would flare. So
 // the cap gets an act zero as well, and for the same reason the handle's has
-// one: the drawing that lies down neatly beside its neighbours and the drawing
-// that bends up honestly are two different drawings. The first is a triangle,
-// apex at the middle and the rim its base; the second is the sector. They have
-// the same area, since a triangle on the same base with height equal to the
-// sector's radius does, so act zero only bows the base out and does not have
-// to stretch the paper to do it.
+// one: the drawing that lies down beside its neighbours and the drawing that
+// bends up honestly are two different drawings.
+//
+// And the drawing it lies down as is a pentagon, the same pentagon a handle
+// with one neck is drawn as. Nothing about the shape of a net should say which
+// of the two a piece is; the arrows on its edges say it, and nothing else. A
+// pentagon reads
+//
+//     a b a^-1 b^-1 c        a torus with a disc gone
+//     a b b^-1 a^-1 c        a sphere with a disc gone
+//
+// -- the same five sides, paired across in one and nested in the other, which
+// is the whole difference between a handle and a cap. Crossed pairs are a
+// handle; nested pairs cancel and leave a disc. The slit here is one cut from
+// the rim to the middle, so cutting it in half at the halfway point gives the
+// four sides, and gluing lip to lip at equal depth pairs them nested.
 
 import { phaseAt, THREE_ACT } from './roll.js';
+import { tutte, arap } from './piece.js';
 
 const FRONT = [201, 194, 176];
 const BACK = [166, 156, 136];
 const GRID = [173, 165, 148];
 const RIM = [194, 138, 27];
-const SLIT = [42, 127, 122];
+const PAIR_A = [42, 127, 122];
+const PAIR_B = [181, 53, 44];
 
 // How far round the finished ball the cap reaches, from its apex to its rim.
 // Well past a hemisphere, so the end of a net reads as closed off rather than
@@ -61,23 +73,30 @@ export function buildCap(opts = {}) {
   const ball = (rho * rho + H * H) / (2 * H); // the sphere the dome sits on
   const psi = Math.acos(Math.max(-1, Math.min(1, (ball - H) / ball)));
 
-  const id = (i, j) => j * (spokes + 1) + i;  // i round, j out from the apex
-  const V = (spokes + 1) * (rings + 1);
+  // The apex is one vertex and not a ring of them. It is a point of the piece,
+  // and a ring of coincident vertices there would be a stretch of boundary
+  // that has to be pinned somewhere in the flat drawing, when what belongs
+  // there is the single corner where the two lips of the slit meet.
+  const id = (i, j) => (j === 0 ? 0 : 1 + (j - 1) * (spokes + 1) + i);
+  const V = 1 + rings * (spokes + 1);
   const uv = new Float32Array(V * 2);
   for (let j = 0; j <= rings; j++) {
     for (let i = 0; i <= spokes; i++) {
-      uv[id(i, j) * 2] = (i / spokes - 0.5) * theta * my;   // round
-      uv[id(i, j) * 2 + 1] = j / rings;                     // out
+      uv[id(i, j) * 2] = j === 0 ? 0 : (i / spokes - 0.5) * theta * my;
+      uv[id(i, j) * 2 + 1] = j / rings;
     }
   }
   const F = spokes * rings;
   const faces = new Int32Array(F * 4);
+  const quads = [];
   const wind = mirror ? [0, 3, 2, 1] : [0, 1, 2, 3];
   let f = 0;
   for (let j = 0; j < rings; j++) {
     for (let i = 0; i < spokes; i++, f++) {
       const q = [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)];
-      for (let c = 0; c < 4; c++) faces[f * 4 + c] = q[wind[c]];
+      const w = wind.map(c => q[c]);
+      quads.push(w);
+      for (let c = 0; c < 4; c++) faces[f * 4 + c] = w[c];
     }
   }
   const rgb = new Uint8Array(F * 3), backRGB = new Uint8Array(F * 3);
@@ -87,18 +106,79 @@ export function buildCap(opts = {}) {
 
   const rim = [];
   for (let i = 0; i <= spokes; i++) rim.push(id(i, rings));
-  // the two lips of the slit, which are glued to each other
+  // the two lips of the slit, glued to each other at equal depth
   const glue = [];
-  for (let j = 0; j <= rings; j++) glue.push([id(0, j), id(spokes, j)]);
-  // and every vertex of the apex ring is the same point
-  for (let i = 1; i <= spokes; i++) glue.push([id(0, 0), id(i, 0)]);
+  for (let j = 1; j < rings; j++) glue.push([id(0, j), id(spokes, j)]);
+  glue.push([id(0, rings), id(spokes, rings)]);
 
-  return {
-    kind: 'cap', k: 1, n: 1, V, F, faces, rgb, backRGB, seam: [], uv, id,
-    spokes, rings, edge, rho, slant, theta, alpha, H, ball, psi, mirror,
-    rims: [rim], rimDir: [0], rimReach: [slant], behind: [slant], glue,
+  const flat = sector(uv, V, slant);
+  const cap = {
+    kind: 'cap', k: 1, n: 5, V, F, faces, quads, rgb, backRGB, seam: [], uv, id,
+    spokes, rings, edge, rho, slant, theta, alpha, H, ball, psi, mirror, my,
+    rims: [rim], rimDir: [0], rimReach: [0], behind: [slant], glue,
     plan: THREE_ACT,
   };
+  const P = pentagon(edge, my);
+  cap.corners = P;
+  cap.rimReach = [Math.hypot((P[0][0] + P[1][0]) / 2, (P[0][1] + P[1][1]) / 2)];
+  cap.pent = layout(cap, P, flat);
+  return cap;
+}
+
+// The sector, which is what the piece really is, and what the flat drawing is
+// relaxed against.
+function sector(uv, V, slant) {
+  const out = new Float32Array(V * 2);
+  for (let i = 0; i < V; i++) {
+    const s = uv[i * 2 + 1] * slant, phi = uv[i * 2];
+    out[i * 2] = s * Math.cos(phi);
+    out[i * 2 + 1] = s * Math.sin(phi);
+  }
+  return out;
+}
+
+// The pentagon it is drawn as, with side 0 facing the neck, the same way a
+// handle's does.
+function pentagon(edge, my) {
+  const rad = edge / (2 * Math.sin(Math.PI / 5));
+  const P = [];
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 5 + (i / 5) * 2 * Math.PI;
+    P.push([Math.cos(a) * rad, my * Math.sin(a) * rad]);
+  }
+  return P;
+}
+
+// The rim takes side 0. The slit, cut in half at its halfway point, takes the
+// other four: the outer half of one lip and the outer half of the other end up
+// on sides 1 and 4, the inner halves on 2 and 3, and the apex on the corner
+// between them. So the pairs are nested, which is what makes it a sphere.
+function layout(cap, P, rest) {
+  const { spokes, rings, id } = cap;
+  const pinned = new Map();
+  const along = (list, a, b) => {
+    list.forEach((v, i) => {
+      const f = (i + 0.5) / list.length;
+      pinned.set(v, [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]);
+    });
+  };
+  const rim = [];
+  for (let i = 0; i <= spokes; i++) rim.push(id(i, rings));
+  rim.forEach((v, i) => {
+    const f = i / (rim.length - 1);
+    pinned.set(v, [P[0][0] + (P[1][0] - P[0][0]) * f, P[0][1] + (P[1][1] - P[0][1]) * f]);
+  });
+  const half = Math.floor((rings - 1) / 2);
+  const hi = [], lo = [];
+  for (let j = rings - 1; j >= 1; j--) hi.push(id(spokes, j));
+  for (let j = 1; j <= rings - 1; j++) lo.push(id(0, j));
+  along(hi.slice(0, hi.length - half), P[1], P[2]);
+  along(hi.slice(hi.length - half), P[2], P[3]);
+  pinned.set(id(0, 0), P[3]);
+  along(lo.slice(0, half), P[3], P[4]);
+  along(lo.slice(half), P[4], P[0]);
+  const mesh = { faces: cap.quads, V: cap.V };
+  return arap(mesh, pinned, rest, tutte(mesh, pinned, 700));
 }
 
 // Where every vertex is at time t.
@@ -114,7 +194,7 @@ export function buildCap(opts = {}) {
 // by a right angle over the act for the rim to end up facing the way it faced
 // to begin with.
 export function capPositions(cap, t, opts = {}, out) {
-  const { V, uv, slant, alpha, ball, psi, edge, theta } = cap;
+  const { V, uv, slant, alpha, ball, psi } = cap;
   const { open, curl, ring } = phaseAt(t, cap.plan);
   const pos = out && out.length === V * 3 ? out : new Float32Array(V * 3);
   const a = Math.PI / 2 + (alpha - Math.PI / 2) * curl;
@@ -138,9 +218,9 @@ export function capPositions(cap, t, opts = {}, out) {
     // the way the sector's arc faced
     let px = x * cq + z * sq, py = y, pz = -x * sq + z * cq;
     if (open < 1) {
-      // and before any of that, the triangle it is drawn as beside its
-      // neighbours, bowing out into the sector it really is
-      const tx = u * slant, ty = ((phi / (theta / 2)) * edge) / 2 * u;
+      // and before any of that, the pentagon it is drawn as beside its
+      // neighbours, opening out into the sector it really is
+      const tx = cap.pent[i * 2], ty = cap.pent[i * 2 + 1];
       px = tx + (px - tx) * open;
       py = ty + (py - ty) * open;
       pz *= open;
@@ -162,9 +242,16 @@ export function capOverlay(cap) {
     const ids = []; for (let i = 0; i <= spokes; i++) ids.push(id(i, j));
     grid.push({ ids, rgb: GRID, kind: 'grid' });
   }
-  const lip = i => { const ids = []; for (let j = 0; j <= rings; j++) ids.push(id(i, j)); return ids; };
-  edges.push({ ids: lip(0), rgb: SLIT, wide: true, kind: 'edge', glue: 'curl' });
-  edges.push({ ids: lip(spokes), rgb: SLIT, wide: true, kind: 'edge', glue: 'curl' });
+  // the two halves of each lip, coloured by which pair they belong to: outer
+  // half with outer half, inner with inner, which is the nesting
+  const half = Math.ceil(rings / 2);
+  const lip = (i, from, to) => {
+    const ids = []; for (let j = from; j <= to; j++) ids.push(id(i, j)); return ids;
+  };
+  for (const i of [0, spokes]) {
+    edges.push({ ids: lip(i, half, rings), rgb: PAIR_A, wide: true, kind: 'edge', glue: 'curl' });
+    edges.push({ ids: lip(i, 0, half), rgb: PAIR_B, wide: true, kind: 'edge', glue: 'curl' });
+  }
   edges.push({ ids: cap.rims[0], rgb: RIM, wide: true, kind: 'rim', glue: 'ring' });
   return { grid, edges };
 }

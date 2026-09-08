@@ -219,6 +219,23 @@ reads round as `c s s⁻¹`: the outer arc is the rim, an unbroken arc of the
 boundary, and the two straight radii are the lips of the slit, glued back to
 each other.
 
+**And a cap is drawn as a pentagon, the same pentagon a handle with one neck
+is drawn as.** Nothing about the shape of a net should say which of the two a
+piece is; the arrows on its edges say it, and nothing else:
+
+| | |
+| --- | --- |
+| `a b a⁻¹ b⁻¹ c` | a torus with a disc gone |
+| `a b b⁻¹ a⁻¹ c` | a sphere with a disc gone |
+
+The same five sides, paired **across** in one and **nested** in the other, and
+that is the whole difference between a handle and a cap. Crossed pairs are a
+handle; nested pairs cancel and leave a disc. The slit here is one cut from the
+rim to the middle, so cutting it in half at its halfway point gives the four
+sides, and gluing lip to lip at equal depth pairs them nested: the outer half
+of one lip with the outer half of the other, the inner with the inner, and the
+apex on the corner between.
+
 And then the roll comes out *better* than the handle's does. Rolling a sector
 up until its two radii meet gives a cone, and that is an honest bend the whole
 way — a cone is developable, so no length in the paper changes and there is
@@ -226,13 +243,27 @@ nothing to apologise for. Only the second act, rounding the cone off into a
 ball, has to stretch, and for the same reason as always: a sphere has curvature
 and a cone has none.
 
-A cap has an act zero too, for the same reason a handle does. Its rim is an
-*arc* and a handle's rim side is straight, so a neck sewn between the two would
-flare. The drawing that lies down neatly beside its neighbours is a triangle,
-apex in the middle and the rim its base; the drawing that bends up honestly is
-the sector. They have the same area — a triangle on the same base with height
-equal to the sector's radius does — so act zero only bows the base out, and
-does not have to stretch the paper to do it.
+So a cap has an act zero too, for the same reason a handle does: the drawing
+that lies down beside its neighbours and the drawing that bends up honestly are
+two different drawings. Here act zero opens the pentagon out into the sector.
+
+### Still to do: the octagon
+
+A piece with `k` necks ought to read as `a b a⁻¹ b⁻¹ c₁ … c_k` — four whole
+edges of the sheet and `k` rims — and it does not yet. Every slit runs from its
+hole out to the middle of the same edge of the sheet, so that one edge is
+broken into `k + 1` arcs and spread all round the drawing: a piece with four
+necks comes out with three whole sides and a fourth shredded into four.
+
+The fix is to send the slits to the four **corners** instead, one each, so that
+no edge is broken anywhere but at its very ends. Then the piece reads
+`a c₁ b c₂ a⁻¹ c₃ b⁻¹ c₄` — edges and rims alternating, which is the pattern,
+with the necks still spread the whole way round. The general slit path that
+needs is built and tested; what is not settled is the bookkeeping between it
+and the reflection. A neck is only a rectangle if both its rims are laid along
+their sides the same way round, and a reflected piece meets its rims in the
+opposite order, so the two constraints pull against each other for a piece with
+three necks or more. That wants a cleaner formulation than trial and error.
 
 **Every other piece is built as a mirror image.** That is not decoration. Two
 holes that face each other agree about the way round the tube and disagree
