@@ -38,12 +38,18 @@ export function emptyNet() {
   return { nodes: [{ kind: 'handle', nbrs: [] }] };
 }
 
+// The most necks a piece can carry. A slit has to run from its hole out to a
+// corner of the sheet if the four edges are to stay whole -- see `buildHandle`
+// -- and a sheet has four corners.
+export const NECKS = 4;
+
 // Give a piece another neck, with something new on the end of it: another
 // handle, which adds one to the genus, or a cap, which closes the neck off and
 // adds nothing. Nothing can be hung off a cap, since a cap has the one rim it
 // arrived with and no way to grow another.
 export function grow(net, at, kind = 'handle') {
   if (net.nodes[at].kind === 'cap') return -1;
+  if (net.nodes[at].nbrs.length >= NECKS) return -1;
   const id = net.nodes.length;
   net.nodes.push({ kind, nbrs: [at] });
   net.nodes[at].nbrs.push(id);

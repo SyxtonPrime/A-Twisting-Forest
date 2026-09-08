@@ -1052,6 +1052,79 @@ test('piece: act zero is flat, and does not start until the piece is drawn', () 
   ok(Math.abs(2 * h - 2 * Math.PI * PIECE.r) < 1e-3, 'developed to 2pir across');
 });
 
+test('piece: each edge of the sheet gets a whole side of the polygon to itself', () => {
+  // The point of sending the slits to the corners. A piece with k necks is a
+  // (4 + k)-gon: k rim sides, and four more which are the four edges of the
+  // sheet, one each. Send the slits out along their rows instead and all k
+  // mouths land in the middle of the u = 0 edge, which shreds one side into
+  // k + 1 arcs and spreads them all round the polygon.
+  for (const k of [1, 2, 3, 4]) {
+    for (const mirror of [false, true]) {
+      const piece = buildPiece({ nu: 12, nv: 36, hu: 3, hv: 3, R: 3, r: 1, rims: k, mirror });
+      const { nu, nv } = piece, P = piece.corners, flat = piecePositions(piece, 0);
+      const nearest = (x, y) => {
+        let best = -1, near = Infinity;
+        for (let i = 0; i < P.length; i++) {
+          const d = toSegment(x, y, P[i], P[(i + 1) % P.length]);
+          if (d < near) { near = d; best = i; }
+        }
+        return best;
+      };
+      // one tally per edge of the sheet, of which side each of its vertices
+      // ended up nearest to
+      const tally = [new Map(), new Map(), new Map(), new Map()];
+      for (let i = 0; i < piece.V; i++) {
+        const [u, v] = piece.h.uv[i];
+        const e = u === 0 ? 0 : u === nu ? 1 : v === 0 ? 2 : v === nv ? 3 : -1;
+        if (e < 0) continue;
+        const sd = nearest(flat[i * 3], flat[i * 3 + 1]);
+        tally[e].set(sd, (tally[e].get(sd) || 0) + 1);
+      }
+      const took = [];
+      tally.forEach((t, e) => {
+        let side = -1, most = 0, all = 0;
+        for (const [sd, n] of t) { all += n; if (n > most) { most = n; side = sd; } }
+        ok(most / all > 0.6, `k=${k} mirror=${mirror}: edge ${e} is mostly on one side: ` +
+           `${most}/${all} on side ${side}`);
+        took.push(side);
+      });
+      eq(new Set(took).size, 4, `k=${k} mirror=${mirror}: the four edges take four different sides`);
+      for (const sd of took) {
+        ok(!piece.sides.includes(sd), `k=${k} mirror=${mirror}: side ${sd} is not a rim side ` +
+           `(rims are on ${piece.sides})`);
+      }
+    }
+  }
+});
+
+test('piece: however the slits are routed, the cut piece is still a disc', () => {
+  for (const k of [0, 1, 2, 3, 4]) {
+    const piece = buildPiece({ nu: 12, nv: 36, hu: 3, hv: 3, R: 3, r: 1, rims: k });
+    const count = new Map();
+    const key = (a, b) => (a < b ? a + ':' + b : b + ':' + a);
+    for (const f of piece.h.faces) for (let i = 0; i < 4; i++) {
+      const kk = key(f[i], f[(i + 1) % 4]);
+      count.set(kk, (count.get(kk) || 0) + 1);
+    }
+    for (const [kk, n] of count) ok(n <= 2, `k=${k}: edge ${kk} is used by ${n} faces`);
+    const onBoundary = new Set();
+    let edges = 0;
+    for (const [kk, n] of count) {
+      if (n !== 1) continue;
+      edges++;
+      for (const v of kk.split(':')) onBoundary.add(Number(v));
+    }
+    // one closed loop: as many boundary edges as boundary vertices, and the
+    // walk reaches all of them
+    eq(edges, onBoundary.size, `k=${k}: the boundary is a single closed loop`);
+    eq(boundaryOf(piece).length, onBoundary.size, `k=${k}: the walk visits all of it`);
+    // and every vertex of the mesh is used by a face, so nothing was cut loose
+    const used = new Set();
+    for (const f of piece.h.faces) for (const v of f) used.add(v);
+    eq(used.size, piece.V, `k=${k}: every vertex belongs to a face`);
+  }
+});
+
 // ---- a net of handles ---------------------------------------------------
 
 const SMALL = { nu: 12, nv: 36, hu: 3, hv: 3, R: 3, r: 1 };

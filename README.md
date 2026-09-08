@@ -247,23 +247,50 @@ So a cap has an act zero too, for the same reason a handle does: the drawing
 that lies down beside its neighbours and the drawing that bends up honestly are
 two different drawings. Here act zero opens the pentagon out into the sector.
 
-### Still to do: the octagon
+### The slits go to the corners
 
-A piece with `k` necks ought to read as `a b a⁻¹ b⁻¹ c₁ … c_k` — four whole
-edges of the sheet and `k` rims — and it does not yet. Every slit runs from its
-hole out to the middle of the same edge of the sheet, so that one edge is
-broken into `k + 1` arcs and spread all round the drawing: a piece with four
-necks comes out with three whole sides and a fourth shredded into four.
+A piece with `k` necks reads as `a c₁ b c₂ a⁻¹ c₃ b⁻¹ c₄` — the four edges of
+the sheet whole, and the rims between them — because each slit is sent out to
+its own **corner** of the sheet. Run them all out along their own rows instead,
+which is what the chain still does, and every mouth lands in the middle of the
+`u = 0` edge and breaks it into `k + 1` arcs, so a piece with four necks comes
+out with three whole sides and a fourth shredded into four.
 
-The fix is to send the slits to the four **corners** instead, one each, so that
-no edge is broken anywhere but at its very ends. Then the piece reads
-`a c₁ b c₂ a⁻¹ c₃ b⁻¹ c₄` — edges and rims alternating, which is the pattern,
-with the necks still spread the whole way round. The general slit path that
-needs is built and tested; what is not settled is the bookkeeping between it
-and the reflection. A neck is only a rectangle if both its rims are laid along
-their sides the same way round, and a reflected piece meets its rims in the
-opposite order, so the two constraints pull against each other for a piece with
-three necks or more. That wants a cleaner formulation than trial and error.
+A sheet has four corners, so four necks is the most a piece can carry, and
+`grow` says no to a fifth. Three things make the routing work:
+
+- **A slit bound for the far side ducks one row under its hole** and crosses
+  beneath it, rather than leaving by the hole's far corner. Every slit has to
+  leave its hole at the same corner, because a rim is walked from wherever its
+  slit meets it, and two rims sewn into a neck that start a quarter of the way
+  round from each other give a neck with a quarter turn in it once the piece is
+  rolled up. Flat that is invisible: both rims are still pinned corner to corner
+  along their own sides.
+- **The rows fall the right way round.** Two slits share each side of the
+  sheet — one running up, one running down — and their paths cross unless the
+  one going down sits below the one going up. That is settled by where the seam
+  goes: in the gap between the last rim and the first, so that the wrap in the
+  row numbers falls there and nowhere else.
+- **The boundary is shared out by the sheet's edges**, not by vertex count and
+  not by length. A whole edge is due a whole side, a scrap left at the end of
+  one is due a cell's worth, and the two lips of a slit are due nothing at all,
+  since they are the same points of the sheet and the drawing lays them on top
+  of each other. Share it by count and the lips — which can be half the length
+  of the walk — swallow the edges; share it by length and the four edges come
+  out uneven, because the sheet is three times longer than it is deep while the
+  polygon's sides are equal. (The lips get a sliver rather than exactly nothing,
+  since a run of vertices pinned at one point is a fan of degenerate cells.)
+
+The thing that looked like it would be hard was the bookkeeping between the
+routing and the reflection: a neck is only a rectangle if both its rims are laid
+along their sides the same way round, while Tutte only gives a drawing if the
+walk is pinned in the polygon's own rotational order, and reflecting a piece
+looks like it should reverse that. It does not. A piece's mesh does not depend
+on its handedness at all — the same holes on the same rows, cut the same way —
+so the walk comes out the same either way, and only the drawing it is pinned to
+is reflected. All that was needed was to settle which way round the walk itself
+runs, which is otherwise an accident of the mesh, and that is now read off the
+sign of the area it encloses in the grid's own coordinates.
 
 **Every other piece is built as a mirror image.** That is not decoration. Two
 holes that face each other agree about the way round the tube and disagree
@@ -299,7 +326,9 @@ not:
   that is indistinguishable from ascending — a step of one is a step of one
   whichever way round two things are — so guessing wrong there laid every rim
   of a pentagon along its side backwards and folded the necks into bowties, but
-  only once a piece with three rims existed to show it.
+  only once a piece with three rims existed to show it. A cap's pentagon is laid
+  out by hand and comes out the other way round, so a cap that answers a handle
+  of a given handedness is drawn as its reflection.
 - The developed sheet runs from `−πR` to `+πR`, so the row a hole sits on is
   half a ring away from the angle it stands at. Leaving that half turn out puts
   every neighbour on the wrong side of its parent, which is invisible flat and

@@ -375,7 +375,9 @@ function rebuild() {
     const moved = Math.hypot(e.clientX - from[0], e.clientY - from[1]);
     const held = performance.now() - from[2];
     from = null;
-    if (moved > 8 || held > 700 || model.nodes.length >= 8) return;
+    // no limit on how many pieces a net may have: `grow` says no when a piece
+    // is full, which is at four necks, one for each corner of its sheet
+    if (moved > 8 || held > 700) return;
     const box = c.getBoundingClientRect();
     const sx = (e.clientX - box.left) * (solid.w / box.width);
     const sy = (e.clientY - box.top) * (solid.h / box.height);

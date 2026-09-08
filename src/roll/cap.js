@@ -60,7 +60,14 @@ export function buildCap(opts = {}) {
   const spokes = opts.spokes || 16;           // must match the handle's rim
   const rings = opts.rings || 10;
   const mirror = !!opts.mirror;
-  const my = mirror ? -1 : 1;
+  // `mirror` means what it means for a handle -- which of the net's two
+  // colours this piece is -- and `my` is which way round the cap is actually
+  // drawn, which is the other one. A handle's boundary comes out of its mesh
+  // one way round and a cap's pentagon is laid out by hand the other, so a cap
+  // that is to answer a handle of a given handedness has to be its reflection,
+  // or the two rims run opposite ways along their sides and the neck between
+  // them comes out a bowtie.
+  const my = mirror ? 1 : -1;
 
   const rho = edge / (2 * Math.PI);           // the rim, once it is a circle
   // the sector: its arc is the rim, so its radius is fixed by how far round
@@ -89,7 +96,7 @@ export function buildCap(opts = {}) {
   const F = spokes * rings;
   const faces = new Int32Array(F * 4);
   const quads = [];
-  const wind = mirror ? [0, 3, 2, 1] : [0, 1, 2, 3];
+  const wind = my > 0 ? [0, 3, 2, 1] : [0, 1, 2, 3];
   let f = 0;
   for (let j = 0; j < rings; j++) {
     for (let i = 0; i < spokes; i++, f++) {

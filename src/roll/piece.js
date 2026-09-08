@@ -65,10 +65,24 @@ export function buildPiece(opts = {}) {
   const n = 4 + k;                           // sides of the polygon it is drawn as
   const aspect = opts.aspect === undefined ? 1 : opts.aspect;
 
-  // Which sides of the polygon are rims, spread as evenly as they will go, and
-  // which way each of those sides faces.
-  const sides = [];
-  for (let j = 0; j < k; j++) sides.push(Math.round((j * n) / k) % n);
+  // Which corner of the sheet each slit is sent to, and so which side of the
+  // polygon each rim takes.
+  //
+  // The boundary walk meets the mouths in slot order and crosses one whole
+  // edge of the sheet for every slot it skips between two of them, so the side
+  // a rim lands on is not an even share of the polygon: it is one further round
+  // than the last, plus one for each empty corner in between. With four rims
+  // that is every other side; with two, opposite sides; with one, one side.
+  //
+  // Slots run the other way from rim indices because the walk meets the rims in
+  // descending order -- see `polygonLayout`, which pins them that way round.
+  const slot = [];
+  for (let j = 0; j < k; j++) slot.push(Math.round(((k - 1 - j) * 4) / k) % 4);
+  const sides = new Array(k).fill(0);
+  for (let j = k - 2; j >= 0; j--) {
+    const gap = (((slot[j] - slot[j + 1]) % 4) + 4) % 4;
+    sides[j] = (((sides[j + 1] - 1 - gap) % n) + n) % n;
+  }
   // Every polygon is drawn with the same side length, whatever its number of
   // sides. It has to be: a rim side stands for the circle round a hole, every
   // hole is the same size, and two rim sides sewn to the same neck have to be
@@ -83,8 +97,9 @@ export function buildPiece(opts = {}) {
   // turns the ring the other way, which is what the mx does.
   //
   // The whole polygon is then turned so that the seam of the sheet -- the edge
-  // the two ends of the ring meet along -- lands in the widest gap between
-  // holes. A hole sitting on the seam would be cut in half by it.
+  // the two ends of the ring meet along -- lands in the gap between the last
+  // rim and the first. A hole sitting on the seam would be cut in half by it,
+  // and the wrap in the rows has to fall there and nowhere else.
   // ...and the extra half turn is because the developed sheet runs from -piR to
   // +piR, so the row a hole sits on is half a ring away from the angle it
   // stands at. Leave it out and every neighbour is placed on the wrong side of
@@ -92,7 +107,7 @@ export function buildPiece(opts = {}) {
   // the moment the rings close.
   const HALF = Math.PI;
   const base = sides.map(sd => ((sd + 0.5) * 2 * Math.PI) / n - Math.PI / n);
-  const turn = k ? seamGap(base.map(a => wrap(mx * (a + Math.PI / 2) + HALF))) * mx : 0;
+  const turn = k ? Math.PI / 2 - seam(base) : 0;
   const first = -Math.PI / n + turn;
   const P = [];
   for (let i = 0; i < n; i++) {
@@ -109,17 +124,17 @@ export function buildPiece(opts = {}) {
   // in its `side`, and one of them silently won.
   const edge2 = Math.hypot(P[1][0] - P[0][0], P[1][1] - P[0][1]);
 
-  // and so, the row of the grid each hole sits on
+  // and so, the row of the grid each hole sits on. The seam was picked to put
+  // the wrap in the gap between the last rim and the first, so these come out
+  // up the sheet in rim order -- which is what the slots need, since a slit
+  // running down to v = 0 has to sit below the one sharing its lane.
   const u0 = Math.round(nu / 2 - hu / 2);
   const rows = rimDir.map(a => {
     const phi = wrap(mx * (a + Math.PI / 2) + HALF);
     return Math.round((nv * phi) / (2 * Math.PI) - hv / 2);
   });
-  // holes are listed up the sheet, which is the order the boundary walk meets
-  // them in, and the drawing needs to know which rim is which afterwards
-  const order = rows.map((v, j) => j).sort((a, b) => rows[a] - rows[b]);
-  const h = buildHandle({ nu, nv, hu, hv, R, r, rims: k, u0,
-                          rows: order.map(j => rows[j]), aOff: 0, bOff: 0 });
+  const h = buildHandle({ nu, nv, hu, hv, R, r, rims: k, u0, rows, slots: slot,
+                          aOff: 0, bOff: 0 });
 
   // ---- the developed drawing: the grid itself ---------------------------
   // u runs round the tube and becomes the way across the sheet; v runs round
@@ -162,11 +177,7 @@ export function buildPiece(opts = {}) {
     for (let c = 0; c < 3; c++) { rgb[i * 3 + c] = FRONT[c]; backRGB[i * 3 + c] = BACK[c]; }
   }
 
-  // rim j of the piece is hole `order[j]` of the grid, since the grid wants
-  // its holes listed up the sheet and the polygon wants them round its rim
-  const slot = new Array(k);
-  order.forEach((j, i) => { slot[j] = i; });
-  const rims = slot.map(i => rimArc(h, i));
+  const rims = h.holes.map((_, i) => rimArc(h, i));
   const flat = polygonLayout(h, rims, sides, P, n, dev);
 
   // How far the developed sheet reaches out behind each rim. That is what says
@@ -192,17 +203,20 @@ export function buildPiece(opts = {}) {
            plan: THREE_ACT, side: -1 };
 }
 
-// Turn the ring so its seam lands in the widest gap between the holes on it.
-// Returns how far to turn, in radians.
-function seamGap(angles) {
-  if (!angles.length) return 0;
-  const a = angles.slice().sort((x, y) => x - y);
-  let best = 0, at = a[0] + Math.PI;         // one hole: put the seam opposite it
-  for (let i = 0; i < a.length; i++) {
-    const next = i + 1 < a.length ? a[i + 1] : a[0] + 2 * Math.PI;
-    if (next - a[i] > best) { best = next - a[i]; at = (a[i] + next) / 2; }
-  }
-  return -at;                                // bring the middle of that gap to zero
+// Where the seam of the sheet goes: in the gap between the last rim and the
+// first, so that the wrap in the row numbers falls there and nowhere else, and
+// the rows come out in rim order all the way up. Anywhere else and a cyclic
+// order that looks right comes out linearly wrong, which the slots would then
+// route across each other. One rim, and it goes opposite that one.
+//
+// The angle returned is where the seam sits among the polygon's own side
+// directions; the caller turns the polygon by minus that, and takes off the
+// further quarter turn between a rim's heading in the page and its heading
+// round the ring.
+function seam(base) {
+  const last = base[base.length - 1];
+  const gap = base.length > 1 ? wrap(base[0] - last) : 2 * Math.PI;
+  return last + gap / 2;
 }
 
 const wrap = a => ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
@@ -282,22 +296,29 @@ export function pieceOverlay(piece, opts = {}) {
   const add = (into, ids, rgb, extra) => {
     for (const run of runs(ids)) if (run.length > 1) into.push({ ids: run, rgb, ...extra });
   };
-  // A column that crosses a slit meets two vertices at its mouth, not one: the
+  // A line that crosses a slit meets two vertices where it does, not one: the
   // two lips, which are the same point of the surface but are yards apart in
   // the flat drawing. Taking either one and carrying straight on draws a line
   // clean across the piece, from one end of a rim to the other, that is not an
-  // edge of anything. So the column stops at one lip and starts at the other.
-  const u0 = h.holes.length ? h.holes[0].u0 : 0;
-  const slit = new Map(h.holes.map(x => [x.v0, x]));
+  // edge of anything. So the line stops at one lip and starts again at the
+  // other. A column meets a slit's legs along the rows and a row meets the lane
+  // it runs out along, and `h.cross` says which lip is on which side.
+  const stop = (cross, u, v) => {
+    const k = u + ',' + v, s = cross.get(k);
+    if (s === undefined) return [h.at(u, v)];
+    const lip = h.lower.get(k), from = h.at(u, v);
+    return s > 0 ? [from, -1, lip] : [lip, -1, from];
+  };
   const col = u => {
     const ids = [];
-    for (let v = 0; v <= nv; v++) {
-      if (slit.has(v) && u <= u0) { ids.push(h.lower.get(u + ',' + v)); ids.push(-1); }
-      ids.push(h.at(u, v));
-    }
+    for (let v = 0; v <= nv; v++) ids.push(...stop(h.cross.col, u, v));
     return ids;
   };
-  const row = v => { const ids = []; for (let u = 0; u <= nu; u++) ids.push(h.at(u, v)); return ids; };
+  const row = v => {
+    const ids = [];
+    for (let u = 0; u <= nu; u++) ids.push(...stop(h.cross.row, u, v));
+    return ids;
+  };
   for (let u = 0; u <= nu; u += si) add(grid, col(u), GRID, { kind: 'grid' });
   for (let v = 0; v <= nv; v += sj) add(grid, row(v), GRID, { kind: 'grid' });
   // `glue` is the act that closes each pair up, so the colour can be let go of
@@ -347,13 +368,20 @@ function divisor(n, want) {
 // perimeter, measured in sides, so side s runs from s to s + 1 and a free
 // stretch between two rims is just the interval between them.
 //
-// The walk round the boundary of the cut piece may meet the rims either way
-// round, since which way it goes is an accident of the mesh, so which way to
-// go round the polygon is read off the order it meets them in. Go the wrong
-// way and the boundary is pinned crossing itself, and Tutte's guarantee -- the
-// one thing that makes this a drawing at all -- is gone.
+// The walk round the boundary of the cut piece is turned the right way round
+// first, since which way it comes out of the mesh is an accident. Then it is
+// pinned going one way and one way only. Pin it the other way and the boundary
+// crosses itself, Tutte's guarantee -- the one thing that makes this a drawing
+// at all -- is gone, and every rim is laid along its side backwards, which
+// leaves the necks folded into bowties.
+//
+// It has to be the same way round for a piece and its reflection, or a neck
+// between the two is sheared. It is: the mesh of a piece does not depend on
+// its handedness at all -- the same holes on the same rows, cut the same way --
+// so the walk comes out the same, and only the drawing it is pinned to is
+// reflected.
 function polygonLayout(h, rims, sides, P, n, dev) {
-  const loop = boundaryLoop(h);
+  const loop = orient(boundaryLoop(h), h);
   const N = loop.length;
   const k = rims.length;
   const which = new Map();
@@ -366,16 +394,43 @@ function polygonLayout(h, rims, sides, P, n, dev) {
     const a = P[i % n], b = P[(i + 1) % n];
     return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
   };
+  // What share of the polygon each stretch of the boundary is due.
+  //
+  // Not one share per vertex, and not one per unit of length either: by which
+  // edge of the sheet it is on. A whole edge is due a whole side, a scrap left
+  // at the end of one is due a cell's worth, and the two lips of a slit are due
+  // nothing at all, because they are the same points of the sheet and the
+  // drawing has them lying on top of each other. Share it out by count and the
+  // lips -- which can be half the length of the walk -- swallow the edges;
+  // share it by length and the four edges come out uneven, since the sheet is
+  // three times longer than it is deep, while the polygon's sides are equal.
+  //
+  // The lips are then given a sliver of what is left over rather than exactly
+  // nothing, since a run of vertices pinned at one point is a fan of degenerate
+  // cells, and Tutte would have nothing to hold them apart with.
+  const LIP = 0.1;
+  const due = v => {
+    const [u, w] = h.uv[v];
+    return (u === 0 || u === h.nu ? 1 / h.nv : 0) + (w === 0 || w === h.nv ? 1 / h.nu : 0);
+  };
   const spread = (list, t0, t1) => {
     if (!list.length) return;
+    const w = list.map(due);
+    const paid = w.reduce((a, b) => a + b, 0);
+    const lips = w.filter(x => !x).length;
+    const sliver = lips ? (paid ? (paid * LIP) / lips : 1 / lips) : 0;
+    let total = 0;
+    for (let i = 0; i < w.length; i++) { w[i] = w[i] || sliver; total += w[i]; }
+    let acc = 0;
     for (let i = 0; i < list.length; i++) {
-      const f = (i + 1) / (list.length + 1);
-      pinned.set(list[i], at(t0 + (t1 - t0) * f));
+      acc += w[i] / 2;
+      pinned.set(list[i], at(t0 + (t1 - t0) * (acc / total)));
+      acc += w[i] / 2;
     }
   };
 
   if (!k) {                                  // a closed torus: nothing to pin to
-    for (let i = 0; i < N; i++) pinned.set(loop[i], at((i / N) * n));
+    spread(loop, 0, n);
     return finish(h, pinned, dev);
   }
 
@@ -395,13 +450,11 @@ function polygonLayout(h, rims, sides, P, n, dev) {
   }
   runs.push(cur);
 
-  // Which way round the polygon the walk is going. The walk meets the rims in
-  // descending order, always -- the boundary is traced one way and the holes
-  // are listed up the sheet the other -- so this only checks the answer rather
-  // than working it out. With one rim or two there is nothing to check, since
-  // a step of one is a step of one whichever way round two things are, and
-  // guessing the wrong way there is what laid every rim of a pentagon along its
-  // side backwards and left the necks folded into bowties.
+  // Which way round the polygon the walk is going: down, since `orient` has
+  // settled which way the walk itself runs and the slots were handed out to
+  // suit. So this only checks the answer rather than working it out. With one
+  // rim or two there is nothing to check, since a step of one is a step of one
+  // whichever way round two things are.
   const seen = runs.filter(x => x.rim !== undefined).map(x => x.rim);
   const dir = -1;
   if (seen.length > 2 && (seen[1] - seen[0] + k) % k === 1) {
@@ -429,43 +482,6 @@ function polygonLayout(h, rims, sides, P, n, dev) {
     while (dir > 0 ? b <= a : b >= a) b += dir * n;
     spread(run.list, a, b);
   }
-  // the lips of the slits have no width at all in the developed sheet, so they
-  // are held close to the ends of the rim they belong to rather than being
-  // given a share of the perimeter they would have to stretch to fill
-  const slitRows = new Set(h.holes.map(x => x.v0));
-  for (let i = 0; i < runs.length; i++) {
-    const run = runs[i];
-    if (run.rim !== undefined) continue;
-    const lips = run.list.filter(v => slitRows.has(h.uv[v][1]) && h.uv[v][0] < h.holes[0].u0);
-    if (!lips.length) continue;
-    const prev = runs[(i - 1 + runs.length) % runs.length].rim;
-    const next = runs[(i + 1) % runs.length].rim;
-    const head = [], tail = [];
-    let inHead = true;
-    for (const v of run.list) {
-      if (inHead && lips.includes(v)) head.push(v); else { inHead = false; tail.push(v); }
-    }
-    const back = [];
-    while (tail.length && lips.includes(tail[tail.length - 1])) back.unshift(tail.pop());
-    if (prev !== undefined && head.length) {
-      const a = endOf(prev);
-      alongRange([at(a), at(a + dir * 0.16)], head.length, 0, 1)
-        .forEach((pt, m) => pinned.set(head[m], pt));
-    }
-    if (next !== undefined && back.length) {
-      const b = startOf(next);
-      alongRange([at(b - dir * 0.16), at(b)], back.length, 0, 1)
-        .forEach((pt, m) => pinned.set(back[m], pt));
-    }
-    // and the rest keeps the room the lips gave up
-    let a = prev === undefined ? 0 : endOf(prev) + dir * 0.16;
-    let b = next === undefined ? n : startOf(next) - dir * 0.16;
-    if (prev !== undefined && next !== undefined) {
-      while (dir > 0 ? b <= a : b >= a) b += dir * n;
-    }
-    spread(tail, a, b);
-  }
-  h.dir = dir;
   return finish(h, pinned, dev);
 }
 
@@ -473,6 +489,22 @@ function polygonLayout(h, rims, sides, P, n, dev) {
 // if all of them are pinned, and a stray one gets dragged into the middle.
 export function boundaryOf(piece) {
   return boundaryLoop(piece.h);
+}
+
+// Which way round the boundary walk goes is an accident of the mesh -- it
+// starts wherever the first vertex happened to land -- and the layout has to
+// know, since it pins the walk to the polygon in one particular direction.
+// So it is settled here, by the sign of the area the walk encloses in the
+// grid's own coordinates. The slits enclose nothing, being walked up one lip
+// and back down the other, so what is left is the sheet, and its sign says
+// which way round the whole thing went.
+function orient(loop, h) {
+  let area = 0;
+  for (let i = 0; i < loop.length; i++) {
+    const a = h.uv[loop[i]], b = h.uv[loop[(i + 1) % loop.length]];
+    area += a[0] * b[1] - b[0] * a[1];
+  }
+  return area > 0 ? loop.slice().reverse() : loop;
 }
 
 function finish(h, pinned, dev) {
